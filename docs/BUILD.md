@@ -118,3 +118,7 @@ Outputs:
 - host CMake build + `engine_tests`
 
 The firmware test is intentionally skipped in CI because no firmware is shipped.
+
+A green run also publishes the debug APK as the `replicant-tr8s-android-debug` workflow artifact.
+The workflow configures the runner's preinstalled SDK directly because
+`android-actions/setup-android` now fails while installing the removed `tools` package.

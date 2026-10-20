@@ -15,6 +15,12 @@
   <em>▶ Watch the 1080p promo (48 s, English) — real emulator UI + audio rendered by the native engine.</em>
 </p>
 
+<p align="center">
+  <a href="https://github.com/DanimanX/ReplicantTr8sAndroid/actions/workflows/android.yml">
+    <img src="https://github.com/DanimanX/ReplicantTr8sAndroid/actions/workflows/android.yml/badge.svg" alt="Android CI">
+  </a>
+</p>
+
 ---
 
 ## Overview
@@ -145,7 +151,7 @@ The parser was verified during development with a user-supplied `tr8s_sys_v300.z
 | Native host engine tests | PASS — silence before play, audio after play, MIDI note trigger, channel filter, transport/clock output, 24 PPQN timing, variation edits |
 | Firmware parser (user-supplied v3.00) | PASS — 128 kits, 128 patterns, 522 tones, factory pattern renders |
 | Android unit tests | PASS — 14 tests: MIDI running status, realtime interleaving, SysEx skip, UMP encode/decode, model invariants |
-| Android build | PASS — `assembleDebug` + `testDebugUnitTest` |
+| Android build | PASS — `assembleDebug` + `testDebugUnitTest` locally and in GitHub Actions (green run, debug APK artifact) |
 | App on emulator | PASS — AAudio stream opens, sequencer runs, steps edit, firmware import, screenshots captured for phone/tablet |
 | USB MIDI hardware | Not available in this environment. The MIDI menu, parser, UMP codec and clock engine are unit-tested; hardware validation is the next external step. |
 
