@@ -34,6 +34,7 @@ AudioDriver::~AudioDriver() {
 
 bool AudioDriver::start() {
     std::lock_guard<std::mutex> lock(mutex_);
+    desiredRunning_.store(true, std::memory_order_relaxed);
     if (running_.load(std::memory_order_relaxed)) return true;
     return openLocked();
 }
@@ -45,6 +46,13 @@ void AudioDriver::renderSilentIfIdle(int frames) {
 }
 
 void AudioDriver::stop() {
+    // Clear the intent first: a callback or watchdog entry that lands while
+    // the stream is closing must not schedule a restart.
+    desiredRunning_.store(false, std::memory_order_relaxed);
+    {
+        std::lock_guard<std::mutex> lock(restartMutex_);
+        restartPending_ = false;
+    }
     std::lock_guard<std::mutex> lock(mutex_);
     stopping_.store(true, std::memory_order_relaxed);
     closeLocked();
@@ -157,16 +165,17 @@ oboe::DataCallbackResult AudioDriver::onAudioReady(oboe::AudioStream* stream, vo
     if (audioData == nullptr || engine_ == nullptr || numFrames <= 0)
         return oboe::DataCallbackResult::Continue;
 
+    const int64_t renderStart = nowNanos();
     // MIDI events are stamped with the moment their audio will reach the DAC,
     // not the moment the callback starts rendering.
     const double outputLatencyMs = latencyMs_.load(std::memory_order_relaxed);
-    const int64_t start = nowNanos() + static_cast<int64_t>(outputLatencyMs * 1.0e6);
-    engine_->process(static_cast<float*>(audioData), numFrames, start);
+    const int64_t eventClock = renderStart + static_cast<int64_t>(outputLatencyMs * 1.0e6);
+    engine_->process(static_cast<float*>(audioData), numFrames, eventClock);
 
     const int64_t end = nowNanos();
     const double budget = static_cast<double>(numFrames) / std::max(1, stream->getSampleRate());
     const float instant = budget > 0.0
-                              ? static_cast<float>(std::max(0.0, static_cast<double>(end - start) / 1e9) / budget)
+                              ? static_cast<float>(static_cast<double>(end - renderStart) / 1e9 / budget)
                               : 0.0f;
     cpuLoad_.store(cpuLoad_.load(std::memory_order_relaxed) * 0.9f + instant * 0.1f,
                    std::memory_order_relaxed);
@@ -187,6 +196,7 @@ oboe::DataCallbackResult AudioDriver::onAudioReady(oboe::AudioStream* stream, vo
 
 void AudioDriver::onErrorAfterClose(oboe::AudioStream* /*stream*/, oboe::Result error) {
     if (stopping_.load(std::memory_order_relaxed)) return;
+    if (!desiredRunning_.load(std::memory_order_relaxed)) return;
     __android_log_print(ANDROID_LOG_ERROR, kTag, "audio stream disconnected: %s",
                         oboe::convertToText(error));
     running_.store(false, std::memory_order_relaxed);
@@ -206,6 +216,7 @@ void AudioDriver::watchdogLoop() {
         lock.unlock();
 
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        if (!desiredRunning_.load(std::memory_order_relaxed)) continue;
         if (!stopping_.load(std::memory_order_relaxed))
             start();
     }

@@ -178,8 +178,9 @@ void Engine::process(float* interleavedStereo, int frames, int64_t blockStartNan
               [](const auto& a, const auto& b) { return a.first < b.first; });
 
     const bool reset = resetRequested_.exchange(false, std::memory_order_relaxed);
+    const bool transportMaster = !clockReceive;
     if (playing && !lastPlaying_) {
-        if (transportSend_.load(std::memory_order_relaxed)) emitOut(kStart, 0, 0, start);
+        if (transportSend_.load(std::memory_order_relaxed) && transportMaster) emitOut(kStart, 0, 0, start);
         playheadStep_.store(0, std::memory_order_relaxed);
         sampleCounterInStep_ = 0.0;
         clockPulse_ = 0;
@@ -188,7 +189,7 @@ void Engine::process(float* interleavedStereo, int frames, int64_t blockStartNan
         advanceStep(0, start);
         lastPlaying_ = true;
     } else if (!playing && lastPlaying_) {
-        if (transportSend_.load(std::memory_order_relaxed)) emitOut(kStop, 0, 0, start);
+        if (transportSend_.load(std::memory_order_relaxed) && transportMaster) emitOut(kStop, 0, 0, start);
         lastPlaying_ = false;
     } else if (reset) {
         playheadStep_.store(0, std::memory_order_relaxed);
@@ -291,7 +292,8 @@ void Engine::process(float* interleavedStereo, int frames, int64_t blockStartNan
             masterPeakR_.store(masterPeak, std::memory_order_relaxed);
 
         if ((i & 15) == 0) {
-            scopeRing_[static_cast<size_t>(sWrite)] = 0.5f * (mixL + mixR);
+            scopeRing_[static_cast<size_t>(sWrite)].store(0.5f * (mixL + mixR),
+                                                         std::memory_order_relaxed);
             sWrite = (sWrite + 1) & 127;
         }
     }
@@ -839,7 +841,7 @@ void Engine::getScope(float* out128) const {
     if (out128 == nullptr) return;
     const int w = scopeWrite_.load(std::memory_order_relaxed);
     for (int i = 0; i < 128; ++i)
-        out128[i] = scopeRing_[static_cast<size_t>((w + i) & 127)];
+        out128[i] = scopeRing_[static_cast<size_t>((w + i) & 127)].load(std::memory_order_relaxed);
 }
 
 void Engine::getMeters(float* out13) const {

@@ -51,8 +51,12 @@ class AudioEngineService : Service() {
 
         startForeground(NOTIFICATION_ID, buildNotification())
         val controller = EngineHolder.get(this)
-        controller.ensureAudio()
-        EngineHolder.getMidi(this).reconnectSaved()
+        // Device open can take a few hundred milliseconds; keep it off the
+        // main thread so the notification appears immediately.
+        Thread({
+            controller.ensureAudio()
+            EngineHolder.getMidi(this).reconnectSaved()
+        }, "engine-init").start()
         requestAudioFocus(controller)
         return START_STICKY
     }

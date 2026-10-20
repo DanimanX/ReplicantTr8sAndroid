@@ -194,7 +194,7 @@ private:
     std::array<std::atomic<float>, kNumChannels> meters_ {};
     std::atomic<float> masterPeakL_ { 0.0f };
     std::atomic<float> masterPeakR_ { 0.0f };
-    std::array<float, 128> scopeRing_ {};
+    std::array<std::atomic<float>, 128> scopeRing_ {};
     std::atomic<int> scopeWrite_ { 0 };
 
     // MIDI in ring (multiple producers, one consumer = audio thread).

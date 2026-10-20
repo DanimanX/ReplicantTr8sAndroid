@@ -92,7 +92,11 @@ class MidiController(
     private var outputPump: Job? = null
 
     private val deviceCallback = object : MidiManager.DeviceCallback() {
-        override fun onDeviceAdded(device: MidiDeviceInfo) = refreshDevices()
+        override fun onDeviceAdded(device: MidiDeviceInfo) {
+            // A replug is a fresh enumeration: pick the saved device back up.
+            refreshDevices(autoConnect = true)
+        }
+
         override fun onDeviceRemoved(device: MidiDeviceInfo) {
             if (device.id == inputInfo?.id) disconnectInput()
             if (device.id == outputInfo?.id) disconnectOutput()
@@ -150,10 +154,42 @@ class MidiController(
     }
 
     fun reconnectSaved() {
-        if (!reconnectNeeded) return
+        if (!reconnectNeeded && (inputPort != null || outputPort != null)) return
         reconnectNeeded = false
-        autoConnectDone = false
-        refreshDevices(autoConnect = true)
+        if (_state.value.devices.isEmpty()) {
+            refreshDevices(autoConnect = true)
+        } else {
+            autoConnectSavedDevices()
+        }
+    }
+
+    /**
+     * Reconnects the last used input/output by stable id, falling back to the
+     * remembered device name because Android USB MIDI ids change per plug.
+     */
+    private fun autoConnectSavedDevices() {
+        val devices = _state.value.devices
+        if (devices.isEmpty()) return
+
+        if (inputPort == null) {
+            val savedId = prefs.getInt(KEY_INPUT_ID, -1)
+            val savedName = prefs.getString(KEY_INPUT_NAME, null)
+            val match = devices.firstOrNull { it.id == savedId && it.inputPorts > 0 }
+                ?: savedName?.let { name ->
+                    devices.firstOrNull { it.name == name && it.inputPorts > 0 }
+                }
+            if (match != null) connectInput(match.id)
+        }
+
+        if (outputPort == null) {
+            val savedId = prefs.getInt(KEY_OUTPUT_ID, -1)
+            val savedName = prefs.getString(KEY_OUTPUT_NAME, null)
+            val match = devices.firstOrNull { it.id == savedId && it.outputPorts > 0 }
+                ?: savedName?.let { name ->
+                    devices.firstOrNull { it.name == name && it.outputPorts > 0 }
+                }
+            if (match != null) connectOutput(match.id)
+        }
     }
 
     fun release() {
@@ -223,16 +259,9 @@ class MidiController(
 
         _state.update { it.copy(devices = entries, scanning = false) }
 
-        if (autoConnect && !autoConnectDone && infos.isNotEmpty()) {
+        if (autoConnect && infos.isNotEmpty()) {
             autoConnectDone = true
-            val savedInput = prefs.getInt(KEY_INPUT_ID, -1)
-            val savedOutput = prefs.getInt(KEY_OUTPUT_ID, -1)
-            if (savedInput >= 0 && infos.containsKey(savedInput)) {
-                scope.launch { connectInput(savedInput) }
-            }
-            if (savedOutput >= 0 && infos.containsKey(savedOutput)) {
-                scope.launch { connectOutput(savedOutput) }
-            }
+            autoConnectSavedDevices()
         }
     }
 
@@ -300,7 +329,10 @@ class MidiController(
             inputReceiver = receiver
             inputUsesUmp = _state.value.useUmp && isUmpDevice(info)
             parser.reset()
-            prefs.edit().putInt(KEY_INPUT_ID, info.id).apply()
+            prefs.edit()
+                .putInt(KEY_INPUT_ID, info.id)
+                .putString(KEY_INPUT_NAME, deviceName(info))
+                .apply()
             _state.update {
                 it.copy(
                     inputDeviceId = info.id,
@@ -346,7 +378,10 @@ class MidiController(
             outputDevice = device
             outputPort = port
             outputUsesUmp = _state.value.useUmp && isUmpDevice(info)
-            prefs.edit().putInt(KEY_OUTPUT_ID, info.id).apply()
+            prefs.edit()
+                .putInt(KEY_OUTPUT_ID, info.id)
+                .putString(KEY_OUTPUT_NAME, deviceName(info))
+                .apply()
             _state.update {
                 it.copy(
                     outputDeviceId = info.id,
@@ -599,5 +634,7 @@ class MidiController(
         private const val KEY_USE_UMP = "use_ump"
         private const val KEY_INPUT_ID = "input_id"
         private const val KEY_OUTPUT_ID = "output_id"
+        private const val KEY_INPUT_NAME = "input_name"
+        private const val KEY_OUTPUT_NAME = "output_name"
     }
 }

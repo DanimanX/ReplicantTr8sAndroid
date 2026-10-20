@@ -76,33 +76,39 @@ class EngineController(context: Context) {
             started = true
         }
 
-        val savedFirmware = firmwareFile.takeIf { it.isFile && it.length() > 64 }
-        if (savedFirmware != null) {
-            runCatching {
-                val bytes = savedFirmware.readBytes()
-                val error = NativeEngine.nativeLoadFirmware(handle, bytes)
-                if (error.isNotEmpty()) {
-                    _state.value = _state.value.copy(engineError = "Saved firmware could not be loaded: $error")
+        // Everything below touches disk, JNI parsing or the audio device, so it
+        // runs off the main thread. The UI shows a "starting" state until the
+        // first snapshot arrives.
+        startSilentTicker()
+        pollJob = workScope.launch { pollLoop() }
+
+        workScope.launch(Dispatchers.IO) {
+            val savedFirmware = firmwareFile.takeIf { it.isFile && it.length() > 64 }
+            if (savedFirmware != null) {
+                runCatching {
+                    val bytes = savedFirmware.readBytes()
+                    val error = NativeEngine.nativeLoadFirmware(handle, bytes)
+                    if (error.isNotEmpty()) {
+                        _state.value = _state.value.copy(
+                            engineError = "Saved firmware could not be loaded: $error"
+                        )
+                    }
                 }
             }
+
+            val audioStarted = NativeEngine.nativeStartAudio(handle)
+            if (!audioStarted) {
+                _state.value = _state.value.copy(
+                    engineError = "No low-latency audio device available. The sequencer is running in silent clock mode."
+                )
+            }
+            reloadCatalog()
+            reloadPatternRows(_state.value.variation)
         }
-
-        val audioStarted = NativeEngine.nativeStartAudio(handle)
-        if (!audioStarted) {
-            _state.value = _state.value.copy(
-                engineError = "No low-latency audio device available. The sequencer is running in silent clock mode."
-            )
-        }
-
-        startSilentTicker()
-
-        pollJob = workScope.launch { pollLoop() }
-        reloadCatalog()
-        reloadPatternRows(_state.value.variation)
     }
 
     fun ensureAudio(): Boolean {
-        val running = NativeEngine.nativeStartAudio(handle)
+        val running = runCatching { NativeEngine.nativeStartAudio(handle) }.getOrDefault(false)
         if (!running) startSilentTicker()
         return running
     }

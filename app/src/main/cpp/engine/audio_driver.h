@@ -50,6 +50,9 @@ private:
     std::shared_ptr<oboe::AudioStream> stream_;
     std::atomic<bool> running_ { false };
     std::atomic<bool> stopping_ { false };
+    // True only while the host (JNI/service) wants audio. The watchdog is not
+    // allowed to resurrect a stream after an explicit stop().
+    std::atomic<bool> desiredRunning_ { false };
 
     std::thread watchdog_;
     std::mutex restartMutex_;
