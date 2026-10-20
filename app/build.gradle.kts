@@ -4,6 +4,21 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Version can be overridden by CI: -PreplicantVersionName=1.0.0 -PreplicantVersionCode=10000
+val replicantVersionName = (project.findProperty("replicantVersionName") as String?) ?: "1.0.0"
+val replicantVersionCode = ((project.findProperty("replicantVersionCode") as String?) ?: "10000").toInt()
+
+// Release signing. CI supplies a keystore through environment variables; local
+// and unsigned builds fall back to the debug key so every release APK installs.
+val releaseKeystore = System.getenv("REPLICANT_KEYSTORE")?.takeIf { it.isNotBlank() }?.let { file(it) }
+val releaseStorePassword = System.getenv("REPLICANT_KEYSTORE_PASSWORD")
+val releaseKeyAlias = System.getenv("REPLICANT_KEY_ALIAS")
+val releaseKeyPassword = System.getenv("REPLICANT_KEY_PASSWORD")
+val hasReleaseSigning = releaseKeystore?.isFile == true &&
+    !releaseStorePassword.isNullOrBlank() &&
+    !releaseKeyAlias.isNullOrBlank() &&
+    !releaseKeyPassword.isNullOrBlank()
+
 android {
     namespace = "com.danimanx.replicanttr8s"
     compileSdk = 35
@@ -13,8 +28,8 @@ android {
         applicationId = "com.danimanx.replicanttr8s"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = replicantVersionCode
+        versionName = replicantVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -54,13 +69,31 @@ android {
         jvmTarget = "17"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isJniDebuggable = true
         }
         release {
             isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Use the CI keystore when provided, otherwise the debug key so
+            // `assembleRelease` always yields an installable APK.
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 

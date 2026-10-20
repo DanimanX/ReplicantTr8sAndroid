@@ -120,5 +120,23 @@ Outputs:
 The firmware test is intentionally skipped in CI because no firmware is shipped.
 
 A green run also publishes the debug APK as the `replicant-tr8s-android-debug` workflow artifact.
+
+## Release executable (tagged builds)
+
+`.github/workflows/release.yml` builds the installable release APK and AAB and
+publishes them to a GitHub Release whenever a version tag is pushed:
+
+```bash
+git tag 1.0.0
+git push origin 1.0.0
+```
+
+It can also be started manually with `gh workflow run release.yml -f version=1.0.0`.
+Assets: `ReplicantTR8S-Android-<version>.apk`, the matching `.aab`, and
+`SHA256SUMS.txt`. The APK is signed with the optional `REPLICANT_KEYSTORE_BASE64`
+secret, or with the CI debug key when no secret is configured.
+
+Full details, including local signing and verification commands, are in
+[RELEASING.md](RELEASING.md).
 The workflow configures the runner's preinstalled SDK directly because
 `android-actions/setup-android` now fails while installing the removed `tools` package.

@@ -19,6 +19,13 @@
   <a href="https://github.com/DanimanX/ReplicantTr8sAndroid/actions/workflows/android.yml">
     <img src="https://github.com/DanimanX/ReplicantTr8sAndroid/actions/workflows/android.yml/badge.svg" alt="Android CI">
   </a>
+  <a href="https://github.com/DanimanX/ReplicantTr8sAndroid/releases/latest">
+    <img src="https://img.shields.io/github/v/release/DanimanX/ReplicantTr8sAndroid?label=release&color=2FE6D0" alt="Latest release">
+  </a>
+</p>
+
+<p align="center">
+  📦 <strong><a href="https://github.com/DanimanX/ReplicantTr8sAndroid/releases/latest">Download the Android APK (latest release)</a></strong>
 </p>
 
 ---
@@ -98,6 +105,25 @@ More: [mixer](screenshots/phone_mixer.png) · [kit library](screenshots/phone_ki
 
 ---
 
+## Download & releases
+
+Every version tag builds and publishes an installable release from GitHub Actions:
+
+- **APK** (`ReplicantTR8S-Android-<version>.apk`) — sideload on Android 8.0+ (arm64-v8a devices; the APK also carries x86_64 for emulators).
+- **AAB** (`ReplicantTR8S-Android-<version>.aab`) — Play Store / bundletool bundle.
+- **SHA256SUMS.txt** — checksums for both binaries.
+
+Install the latest:
+
+```bash
+adb install -r ReplicantTR8S-Android-1.0.0.apk
+```
+
+Releases are produced by `.github/workflows/release.yml` on any `1.0.0`-style or
+`v1.0.0` tag (and by manual dispatch). The APK is signed with the release keystore
+when the `REPLICANT_KEYSTORE_BASE64` secret is configured, otherwise with the CI
+debug key so it still installs. See [docs/RELEASING.md](docs/RELEASING.md).
+
 ## Build
 
 ### Requirements
@@ -152,6 +178,8 @@ The parser was verified during development with a user-supplied `tr8s_sys_v300.z
 | Firmware parser (user-supplied v3.00) | PASS — 128 kits, 128 patterns, 522 tones, factory pattern renders |
 | Android unit tests | PASS — 14 tests: MIDI running status, realtime interleaving, SysEx skip, UMP encode/decode, model invariants |
 | Android build | PASS — `assembleDebug` + `testDebugUnitTest` locally and in GitHub Actions (green run, debug APK artifact) |
+| Android release executable | PASS — `assembleRelease` + `bundleRelease` produce a signed APK/AAB; version `1.0.0` (versionCode `10000`), native ABIs arm64-v8a + x86_64 |
+| Release automation | PASS — tag `1.0.0` triggers the release workflow and publishes the APK, AAB and checksums as GitHub Release assets |
 | App on emulator | PASS — AAudio stream opens, sequencer runs, steps edit, firmware import, screenshots captured for phone/tablet |
 | USB MIDI hardware | Not available in this environment. The MIDI menu, parser, UMP codec and clock engine are unit-tested; hardware validation is the next external step. |
 
