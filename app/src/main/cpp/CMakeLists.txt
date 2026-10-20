@@ -19,7 +19,8 @@ target_include_directories(replicant_engine PRIVATE engine)
 
 target_compile_options(replicant_engine PRIVATE
     -O3
-    -ffast-math
+    -fno-math-errno
+    -fno-trapping-math
     -Wall
     -Wextra
     -Wno-unused-parameter

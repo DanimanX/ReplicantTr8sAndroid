@@ -33,7 +33,9 @@ public:
         int api = 0;      // 1 = AAudio, 2 = OpenSL ES
         int sharing = 0;  // 1 = Exclusive, 2 = Shared
     };
-    Stats stats() const;
+    // Safe to call from the UI thread. It refreshes the stream timestamp and
+    // xrun counters, and grows the buffer if the device is underrunning.
+    Stats stats();
 
     oboe::DataCallbackResult onAudioReady(oboe::AudioStream* stream, void* audioData,
                                           int32_t numFrames) override;
@@ -43,6 +45,7 @@ private:
     bool openLocked();
     void closeLocked();
     void watchdogLoop();
+    void refreshMetrics();
 
     Engine* engine_ = nullptr;
 
@@ -53,6 +56,9 @@ private:
     // True only while the host (JNI/service) wants audio. The watchdog is not
     // allowed to resurrect a stream after an explicit stop().
     std::atomic<bool> desiredRunning_ { false };
+    // Set while the Oboe callback owns the engine, so the silent ticker can
+    // never render into the same voice/FX state concurrently.
+    std::atomic<bool> callbackActive_ { false };
 
     std::thread watchdog_;
     std::mutex restartMutex_;
@@ -60,6 +66,7 @@ private:
     bool restartPending_ = false;
     bool quit_ = false;
 
+    std::mutex metricsMutex_;
     std::atomic<double> latencyMs_ { 0.0 };
     std::atomic<float> cpuLoad_ { 0.0f };
     std::atomic<int> xRuns_ { 0 };

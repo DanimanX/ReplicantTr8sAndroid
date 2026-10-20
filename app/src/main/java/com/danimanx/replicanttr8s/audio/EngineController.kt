@@ -67,6 +67,7 @@ class EngineController(context: Context) {
     private var silentJob: Job? = null
     private var catalogJob: Job? = null
     private var started = false
+    @Volatile private var bootstrapped = false
     private var loadedRowsVariation = -1
     private var loadedRowsPattern = -1
 
@@ -79,45 +80,60 @@ class EngineController(context: Context) {
         // Everything below touches disk, JNI parsing or the audio device, so it
         // runs off the main thread. The UI shows a "starting" state until the
         // first snapshot arrives.
-        startSilentTicker()
         pollJob = workScope.launch { pollLoop() }
 
         workScope.launch(Dispatchers.IO) {
             val savedFirmware = firmwareFile.takeIf { it.isFile && it.length() > 64 }
             if (savedFirmware != null) {
-                runCatching {
-                    val bytes = savedFirmware.readBytes()
-                    val error = NativeEngine.nativeLoadFirmware(handle, bytes)
-                    if (error.isNotEmpty()) {
-                        _state.value = _state.value.copy(
-                            engineError = "Saved firmware could not be loaded: $error"
-                        )
-                    }
+                val error = runCatching {
+                    NativeEngine.nativeLoadFirmware(handle, savedFirmware.readBytes())
+                }.getOrElse { "Saved firmware could not be read: ${it.message}" }
+                if (error.isNotEmpty()) {
+                    runCatching { savedFirmware.delete() }
+                    _state.value = _state.value.copy(engineError = error)
                 }
             }
 
-            val audioStarted = NativeEngine.nativeStartAudio(handle)
-            if (!audioStarted) {
-                _state.value = _state.value.copy(
-                    engineError = "No low-latency audio device available. The sequencer is running in silent clock mode."
-                )
+            // No firmware means no audio stream and no sequencer clock: the
+            // engine stays locked until the user imports their own image.
+            // The polling loop starts before the saved image is parsed, so any
+            // "NO FIRMWARE" names it cached must be invalidated here.
+            kitNameCache.clear()
+            patternNameCache.clear()
+            patternCodeCache.clear()
+            toneNameCache.clear()
+            if (NativeEngine.nativeIsFirmwareLoaded(handle)) {
+                startAudioInternal()
             }
+            bootstrapped = true
             reloadCatalog()
             reloadPatternRows(_state.value.variation)
         }
     }
 
-    fun ensureAudio(): Boolean {
+    fun ensureAudio(): Boolean = startAudioInternal()
+
+    private fun startAudioInternal(): Boolean {
+        if (!NativeEngine.nativeIsFirmwareLoaded(handle)) return false
         val running = runCatching { NativeEngine.nativeStartAudio(handle) }.getOrDefault(false)
-        if (!running) startSilentTicker()
+        if (running) {
+            stopSilentTicker()
+        } else {
+            startSilentTicker()
+            _state.value = _state.value.copy(
+                engineError = "No low-latency audio device available. The sequencer is running in silent clock mode."
+            )
+        }
         return running
     }
 
     private fun startSilentTicker() {
+        if (!NativeEngine.nativeIsFirmwareLoaded(handle)) return
         if (silentJob?.isActive == true) return
         // If the device cannot open an audio stream (or a stream dies), this
         // ticker keeps the sequencer, MIDI clock and UI alive. It is a no-op
-        // while the Oboe callback owns the engine.
+        // while the Oboe callback owns the engine, and it never runs without
+        // firmware.
         silentJob = workScope.launch {
             while (isActive) {
                 NativeEngine.nativeRenderSilent(handle, 512)
@@ -126,9 +142,13 @@ class EngineController(context: Context) {
         }
     }
 
-    fun stopAudio() {
+    private fun stopSilentTicker() {
         silentJob?.cancel()
         silentJob = null
+    }
+
+    fun stopAudio() {
+        stopSilentTicker()
         NativeEngine.nativeStopAudio(handle)
         _state.value = _state.value.copy(audioRunning = false, silentFallback = true)
     }
@@ -149,6 +169,11 @@ class EngineController(context: Context) {
                 if (newState != _state.value) _state.value = newState
                 _meters.value = metersBuffer.toList()
                 _scope.value = scopeBuffer.toList()
+                if (newState.firmwareLoaded) {
+                    if (newState.audioRunning) stopSilentTicker() else startSilentTicker()
+                } else {
+                    stopSilentTicker()
+                }
             } catch (_: Throwable) {
                 // Never let a transient JNI issue kill the UI loop.
             }
@@ -204,10 +229,11 @@ class EngineController(context: Context) {
         )
 
         val kit = status[0].coerceIn(0, 127)
+        val firmwareLoaded = status[9] != 0
         val audioRunning = NativeEngine.nativeIsAudioRunning(handle)
         val staleError = _state.value.engineError
         return EngineUiState(
-            ready = true,
+            ready = bootstrapped,
             audioRunning = audioRunning,
             silentFallback = !audioRunning,
             engineError = if (audioRunning && staleError?.startsWith("No low-latency") == true) null else staleError,
@@ -237,8 +263,8 @@ class EngineController(context: Context) {
             ),
             muteMask = muteMask,
             soloMask = soloMask,
-            firmwareLoaded = status[9] != 0,
-            firmwareName = NativeEngine.nativeFirmwareName(handle),
+            firmwareLoaded = firmwareLoaded,
+            firmwareName = if (firmwareLoaded) NativeEngine.nativeFirmwareName(handle) else "None",
             clockReceive = status[10] != 0,
             clockSend = status[11] != 0,
             transportSend = status[12] != 0,
@@ -265,6 +291,10 @@ class EngineController(context: Context) {
     fun reloadCatalog() {
         catalogJob?.cancel()
         catalogJob = workScope.launch {
+            if (!NativeEngine.nativeIsFirmwareLoaded(handle)) {
+                _catalog.value = EngineCatalog()
+                return@launch
+            }
             val kits = withContext(Dispatchers.IO) { (0 until 128).map { kitName(it) } }
             val patterns = withContext(Dispatchers.IO) { (0 until 128).map { patternName(it) } }
             val codes = withContext(Dispatchers.IO) { (0 until 128).map { patternCode(it) } }
@@ -471,30 +501,37 @@ class EngineController(context: Context) {
         patternNameCache.clear()
         patternCodeCache.clear()
         toneNameCache.clear()
-        reloadCatalog()
-        reloadPatternRows(_state.value.variation)
         _state.value = _state.value.copy(
             firmwareLoaded = true,
             firmwareName = NativeEngine.nativeFirmwareName(handle),
             engineError = null
         )
+        // The engine was locked until now: open the audio device and start the
+        // clock, then refresh the library names.
+        startAudioInternal()
+        reloadCatalog()
+        reloadPatternRows(_state.value.variation)
         ""
     }
 
     fun clearFirmware() {
         runCatching { firmwareFile.delete() }
+        NativeEngine.nativeStopAudio(handle)
+        stopSilentTicker()
         NativeEngine.nativeClearFirmware(handle)
         kitNameCache.clear()
         patternNameCache.clear()
         patternCodeCache.clear()
         toneNameCache.clear()
-        reloadCatalog()
-        reloadPatternRows(_state.value.variation)
         _state.value = _state.value.copy(
             firmwareLoaded = false,
-            firmwareName = NativeEngine.nativeFirmwareName(handle),
+            firmwareName = "None",
+            audioRunning = false,
+            silentFallback = true,
             engineError = null
         )
+        reloadCatalog()
+        reloadPatternRows(_state.value.variation)
     }
 
     private fun unzipFirmware(zipBytes: ByteArray): ByteArray? {

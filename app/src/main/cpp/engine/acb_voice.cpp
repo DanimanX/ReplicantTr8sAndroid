@@ -104,6 +104,11 @@ void AcbVoice::renderNextSample(float& outL, float& outR) {
 
     mono *= currentVelocity * (levelParam * kMaxMixerGain);
     mono = std::tanh(mono * 1.15f);
+    if (!isFiniteSample(mono)) {
+        active = false;
+        mono = 0.0f;
+    }
+    mono = flushDenormal(mono);
 
     const float panAngle = clampf(panParam, 0.0f, 1.0f) * (kPi * 0.5f);
     outL = mono * std::cos(panAngle);
@@ -226,7 +231,7 @@ float AcbVoice::render808Model(int cat) {
         if (envTime > 0.04f && env < 0.0005f) { active = false; return 0.0f; }
 
         const float n = nextWhiteNoise();
-        const float f = 2.0f * std::sin(kPi * std::min(0.35f, (1150.0f * tuneRatio) / static_cast<float>(sampleRate)));
+        const float f = 2.0f * std::sin(kPi * std::min(0.16f, (1150.0f * tuneRatio) / static_cast<float>(sampleRate)));
         const float q = 0.22f;
         const float hp = n - svfLp1 - q * svfBp1;
         svfBp1 += f * hp;
@@ -242,7 +247,7 @@ float AcbVoice::render808Model(int cat) {
         const float env = 0.65f * std::exp(-envTime * 35.0f) + 0.35f * std::exp(-envTime * (5.5f / decayScale));
         if (env < 0.0005f) { active = false; return 0.0f; }
         const float raw = (sq1 + sq2) * 0.5f;
-        const float f = 2.0f * std::sin(kPi * std::min(0.4f, (880.0f * tuneRatio) / static_cast<float>(sampleRate)));
+        const float f = 2.0f * std::sin(kPi * std::min(0.16f, (880.0f * tuneRatio) / static_cast<float>(sampleRate)));
         const float hp = raw - svfLp1 - 0.35f * svfBp1;
         svfBp1 += f * hp;
         svfLp1 += f * svfBp1;
@@ -264,7 +269,7 @@ float AcbVoice::render808Model(int cat) {
     const float env = std::exp(-envTime * decayRate);
     if (env < 0.0005f) { active = false; return 0.0f; }
 
-    const float f = 2.0f * std::sin(kPi * std::min(0.45f, (6200.0f * tuneRatio) / static_cast<float>(sampleRate)));
+    const float f = 2.0f * std::sin(kPi * std::min(0.16f, (6200.0f * tuneRatio) / static_cast<float>(sampleRate)));
     const float hp = metalSum - svfLp1 - 0.5f * svfBp1;
     svfBp1 += f * hp;
     svfLp1 += f * svfBp1;
@@ -346,7 +351,7 @@ float AcbVoice::render909Model(int cat) {
         }
         if (envTime > 0.04f && env < 0.0005f) { active = false; return 0.0f; }
         const float n = nextWhiteNoise();
-        const float f = 2.0f * std::sin(kPi * std::min(0.4f, (1320.0f * tuneRatio) / static_cast<float>(sampleRate)));
+        const float f = 2.0f * std::sin(kPi * std::min(0.16f, (1320.0f * tuneRatio) / static_cast<float>(sampleRate)));
         const float hp = n - svfLp1 - 0.28f * svfBp1;
         svfBp1 += f * hp;
         svfLp1 += f * svfBp1;
@@ -371,7 +376,7 @@ float AcbVoice::render909Model(int cat) {
     const float env = std::exp(-envTime * decayRate);
     if (env < 0.0005f) { active = false; return 0.0f; }
 
-    const float f = 2.0f * std::sin(kPi * std::min(0.45f, (isRide ? 5200.0f : 7400.0f) * tuneRatio /
+    const float f = 2.0f * std::sin(kPi * std::min(0.16f, (isRide ? 5200.0f : 7400.0f) * tuneRatio /
                                                              static_cast<float>(sampleRate)));
     const float hp = quantized6Bit - svfLp1 - 0.4f * svfBp1;
     svfBp1 += f * hp;

@@ -5,6 +5,10 @@
 
 namespace rt8 {
 
+namespace {
+constexpr float kPi = 3.14159265358979323846f;
+} // namespace
+
 void MasterBus::prepare(double newSampleRate, int /*maxBlockSize*/) {
     sampleRate = std::max(8000.0, newSampleRate);
     const int maxDelayLen = static_cast<int>(sampleRate * 2.5) + 1024;
@@ -18,6 +22,7 @@ void MasterBus::prepare(double newSampleRate, int /*maxBlockSize*/) {
     reverb.prepare(sampleRate);
     reverb.setParameters(0.68f, 0.36f, 0.96f);
     setTempoBpm(currentBpm);
+    updateFilterCoefficients();
     reset();
 }
 
@@ -29,7 +34,7 @@ void MasterBus::reset() {
     delayWritePos = 0;
     scatterWritePos = 0;
     scatterReadPhase = 0.0;
-    svfLpL = svfBpL = svfLpR = svfBpR = 0.0f;
+    svfIc1L = svfIc2L = svfIc1R = svfIc2R = 0.0f;
     reverb.reset();
 }
 
@@ -40,8 +45,56 @@ void MasterBus::setTempoBpm(double bpm) {
                           static_cast<int>(delayBufL.size()) - 4);
 }
 
+void MasterBus::setMasterFxFilter(float v) {
+    v = clampf(v, 0.0f, 1.0f);
+    if (std::abs(v - masterFilter) < 1e-6f) return;
+    masterFilter = v;
+    updateFilterCoefficients();
+}
+
+void MasterBus::updateFilterCoefficients() {
+    // 0.5 is the bypass detent. Below it the filter is a low-pass sweep, above
+    // it a high-pass sweep, matching the DJ-style master filter on the panel.
+    filterBypass = std::abs(masterFilter - 0.5f) <= 0.02f;
+    if (filterBypass) {
+        svfIc1L = svfIc2L = svfIc1R = svfIc2R = 0.0f;
+        return;
+    }
+
+    filterHighPass = masterFilter > 0.5f;
+    float cutoffHz;
+    if (filterHighPass) {
+        const float t = clampf((masterFilter - 0.52f) / 0.48f, 0.0f, 1.0f);
+        cutoffHz = 30.0f * std::pow(200.0f, t);                 // 30 Hz .. 6 kHz
+    } else {
+        const float t = clampf((0.48f - masterFilter) / 0.48f, 0.0f, 1.0f);
+        cutoffHz = 18000.0f * std::pow(60.0f / 18000.0f, t);    // 18 kHz .. 60 Hz
+    }
+
+    const float sr = static_cast<float>(sampleRate);
+    cutoffHz = clampf(cutoffHz, 20.0f, 0.45f * sr);
+
+    // Cytomic / TPT state-variable filter: unconditionally stable for any
+    // cutoff below Nyquist, unlike the Chamberlin form used before.
+    const float g = std::tan(kPi * cutoffHz / sr);
+    const float k = filterK;
+    const float a1 = 1.0f / (1.0f + g * (g + k));
+    filterA1 = a1;
+    filterA2 = g * a1;
+    filterA3 = g * filterA2;
+}
+
 void MasterBus::processFrame(float& mainL, float& mainR, float revSendL, float revSendR,
                              float dlySendL, float dlySendR, int currentStep) {
+    // Never let a non-finite value enter a feedback path: one NaN in the delay
+    // or reverb buffer would keep the master bus silent/clipped forever.
+    mainL = sanitize(mainL);
+    mainR = sanitize(mainR);
+    revSendL = sanitize(revSendL);
+    revSendR = sanitize(revSendR);
+    dlySendL = sanitize(dlySendL);
+    dlySendR = sanitize(dlySendR);
+
     if (!delayBufL.empty()) {
         const int bufSize = static_cast<int>(delayBufL.size());
         const int readPosL = (delayWritePos - delaySamples + bufSize) % bufSize;
@@ -51,8 +104,10 @@ void MasterBus::processFrame(float& mainL, float& mainR, float revSendL, float r
         const float dlyR = delayBufR[static_cast<size_t>(readPosR)];
 
         const float feedback = 0.36f + delayLevel * 0.28f;
-        delayBufL[static_cast<size_t>(delayWritePos)] = std::tanh(dlySendL + dlyR * feedback);
-        delayBufR[static_cast<size_t>(delayWritePos)] = std::tanh(dlySendR + dlyL * feedback);
+        delayBufL[static_cast<size_t>(delayWritePos)] =
+            flushDenormal(std::tanh(dlySendL + dlyR * feedback));
+        delayBufR[static_cast<size_t>(delayWritePos)] =
+            flushDenormal(std::tanh(dlySendR + dlyL * feedback));
         delayWritePos = (delayWritePos + 1) % bufSize;
 
         const float dlyGain = (delayLevel > 0.002f) ? (0.35f + delayLevel * 0.75f) : 0.0f;
@@ -109,30 +164,42 @@ void MasterBus::processFrame(float& mainL, float& mainR, float revSendL, float r
         scatterWritePos = (scatterWritePos + 1) % sSize;
     }
 
-    if (std::abs(masterFilter - 0.5f) > 0.02f) {
-        const bool isHpf = (masterFilter > 0.5f);
-        float normFreq = isHpf ? ((masterFilter - 0.52f) / 0.48f) : (masterFilter / 0.48f);
-        normFreq = clampf(normFreq, 0.0f, 1.0f);
-        const float cutoffHz = isHpf ? (30.0f * std::pow(180.0f, normFreq))
-                                     : (80.0f * std::pow(220.0f, normFreq));
-        const float f = 2.0f * std::sin(3.14159265358979323846f * std::min(0.44f, cutoffHz / static_cast<float>(sampleRate)));
-        const float q = 0.52f;
+    if (!filterBypass) {
+        const float v3L = mainL - svfIc2L;
+        const float v1L = filterA1 * svfIc1L + filterA2 * v3L;
+        const float v2L = svfIc2L + filterA2 * svfIc1L + filterA3 * v3L;
+        svfIc1L = flushDenormal(2.0f * v1L - svfIc1L);
+        svfIc2L = flushDenormal(2.0f * v2L - svfIc2L);
+        mainL = filterHighPass ? (mainL - filterK * v1L - v2L) : v2L;
 
-        const float hpL = mainL - svfLpL - q * svfBpL;
-        svfBpL += f * hpL;
-        svfLpL += f * svfBpL;
+        const float v3R = mainR - svfIc2R;
+        const float v1R = filterA1 * svfIc1R + filterA2 * v3R;
+        const float v2R = svfIc2R + filterA2 * svfIc1R + filterA3 * v3R;
+        svfIc1R = flushDenormal(2.0f * v1R - svfIc1R);
+        svfIc2R = flushDenormal(2.0f * v2R - svfIc2R);
+        mainR = filterHighPass ? (mainR - filterK * v1R - v2R) : v2R;
 
-        const float hpR = mainR - svfLpR - q * svfBpR;
-        svfBpR += f * hpR;
-        svfLpR += f * svfBpR;
-
-        mainL = isHpf ? hpL : svfLpL;
-        mainR = isHpf ? hpR : svfLpR;
+        if (!isFiniteSample(svfIc1L) || !isFiniteSample(svfIc2L) ||
+            !isFiniteSample(svfIc1R) || !isFiniteSample(svfIc2R)) {
+            svfIc1L = svfIc2L = svfIc1R = svfIc2R = 0.0f;
+            mainL = 0.0f;
+            mainR = 0.0f;
+        }
     }
 
     const float driveGain = 1.0f + masterDrive * 2.2f;
     mainL = std::tanh(mainL * driveGain) * masterVolume;
     mainR = std::tanh(mainR * driveGain) * masterVolume;
+
+    if (!isFiniteSample(mainL) || !isFiniteSample(mainR)) {
+        // Last-resort recovery: clear every feedback buffer instead of letting
+        // a NaN alias through the delay/reverb/scatter tail forever.
+        reset();
+        mainL = 0.0f;
+        mainR = 0.0f;
+    }
+    mainL = clampf(flushDenormal(mainL), -1.0f, 1.0f);
+    mainR = clampf(flushDenormal(mainR), -1.0f, 1.0f);
 }
 
 } // namespace rt8

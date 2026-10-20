@@ -24,7 +24,7 @@ class AudioEngineService : Service() {
 
     private var focusRequest: AudioFocusRequest? = null
     private var wakeLock: PowerManager.WakeLock? = null
-    private var focused = false
+    @Volatile private var focused = false
 
     override fun onCreate() {
         super.onCreate()
@@ -52,12 +52,14 @@ class AudioEngineService : Service() {
         startForeground(NOTIFICATION_ID, buildNotification())
         val controller = EngineHolder.get(this)
         // Device open can take a few hundred milliseconds; keep it off the
-        // main thread so the notification appears immediately.
+        // main thread so the notification appears immediately. Audio focus is
+        // only requested once the engine is actually unlocked and playing;
+        // without firmware the app stays silent and must not interrupt other
+        // audio.
         Thread({
-            controller.ensureAudio()
+            if (controller.ensureAudio()) requestAudioFocus(controller)
             EngineHolder.getMidi(this).reconnectSaved()
         }, "engine-init").start()
-        requestAudioFocus(controller)
         return START_STICKY
     }
 
@@ -108,16 +110,17 @@ class AudioEngineService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val state = EngineHolder.peek()?.state?.value
-        val detail = if (state?.audioRunning == true) {
-            "LOW-LATENCY ENGINE · ${state.audio.apiLabel} ${state.audio.sampleRate / 1000} kHz"
-        } else {
-            "SILENT CLOCK MODE · connect an audio output"
+        val detail = when {
+            state?.firmwareLoaded != true -> "FIRMWARE REQUIRED · ENGINE LOCKED"
+            state.audioRunning ->
+                "LOW-LATENCY ENGINE · ${state.audio.apiLabel} ${state.audio.sampleRate / 1000} kHz"
+            else -> "SILENT CLOCK MODE · connect an audio output"
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_engine)
             .setContentTitle("Replicant TR-8S")
             .setContentText(detail)
-            .setSubText(if (state != null) "${state.patternCode} ${state.patternName} · ${state.tempo.toInt()} BPM" else null)
+            .setSubText(if (state?.firmwareLoaded == true) "${state.patternCode} ${state.patternName} · ${state.tempo.toInt()} BPM" else null)
             .setContentIntent(openIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)

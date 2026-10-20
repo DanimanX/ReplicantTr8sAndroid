@@ -76,7 +76,7 @@ The Android layer unzips the user's `.zip` with `java.util.zip`, then passes the
 3. Fixed-offset parsing of TONE, KIT and PTN chunks.
 4. Bank publication and reload of the current kit/pattern.
 
-No firmware-derived data is compiled into the binary. The built-in preview bank is original clean-room content.
+No firmware-derived data is compiled into the binary and no preview or factory bank is built in. `Engine` starts with a null bank: `process()` writes silence, the transport stays stopped, and kit/pattern/tone names report `NO FIRMWARE` until the user imports an image. The JNI layer only exposes the parser, never a way to install bundled content.
 
 ## MIDI
 
@@ -89,13 +89,38 @@ No firmware-derived data is compiled into the binary. The built-in preview bank 
 ## Low-latency choices
 
 - Oboe `LowLatency` performance mode.
-- AAudio exclusive mode attempted at 48 kHz.
-- One-burst buffer target, with shared-mode fallback.
+- AAudio exclusive mode is attempted at the device's native sample rate first, then at
+  48 kHz, then shared AAudio, then OpenSL ES. The native-rate attempt avoids a forced
+  resampler that would keep the stream off the MMAP fast path.
+- One-burst buffer when exclusive mode is granted; two bursts in shared mode (AAudio's
+  minimum there). If `getXRunCount()` grows, the driver raises the buffer by one burst,
+  up to four, from the UI thread.
+- The audio callback only renders. `calculateLatencyMillis()`, `getXRunCount()` and
+  buffer queries run from `AudioDriver::stats()` on the UI thread every 250 ms.
 - Float32 stereo, no sample-rate conversion in the engine.
 - Fixed-size event rings; no audio-thread allocation.
-- `-O3 -ffast-math` for the native engine.
+- `-O3` with finite-math assumptions kept intact. `-ffast-math` was removed because it
+  let the compiler assume NaNs cannot happen and folded the old `std::isfinite` checks
+  away, hiding a real filter instability.
 - Foreground service + audio focus + partial wake lock.
 - UI reports the real API, sharing mode, buffer size and latency.
+
+## Audio safety
+
+- The master DJ filter uses a Cytomic/TPT state-variable filter with coefficients
+  recomputed only when the cutoff parameter changes. The previous Chamberlin SVF became
+  unstable at high cutoffs and generated NaNs; those NaNs entered the reverb and delay
+  feedback buffers and corrupted the whole bus for the rest of the session (audible as
+  crackling).
+- `isFiniteSample()` / `flushDenormal()` use bit-level checks, so they remain valid
+  regardless of compiler math flags.
+- Non-finite voice output is dropped before mixing; non-finite master output clears the
+  delay, reverb, scatter and filter state instead of propagating.
+- Reverb comb/allpass and delay feedback states are flushed from subnormal values, which
+  are disproportionately slow on ARM cores.
+- The silent-clock fallback ticker checks an atomic "callback active" flag, so it can
+  never render into the engine while Oboe owns it.
+- `Engine::process()` emits silence immediately when no firmware bank is installed.
 
 ## Known limits
 

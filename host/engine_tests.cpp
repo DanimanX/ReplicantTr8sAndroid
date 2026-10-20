@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "engine.h"
+#include "test_bank.h"
 
 namespace {
 
@@ -49,18 +50,30 @@ int main() {
     engine.setClockSend(true);
     engine.setTransportSend(true);
 
-    expect(engine.getKitIndex() == 1, "default kit is TR-909 Studio");
-    expect(engine.getPatternIndex() == 103, "default pattern is 7-08 Straight 909");
-    expect(engine.kitName(1) == "TR-909 Studio", "kit names are populated");
-    expect(engine.patternName(103) == "Straight 909", "pattern names are populated");
-    expect(!engine.toneName(0).empty(), "tone names are populated");
-    expect(!engine.isFirmwareLoaded(), "preview content is not a user firmware import");
+    std::vector<float> buffer(static_cast<size_t>(kFrames) * 2, 0.0f);
 
-    // Pattern data must be present out of the box.
+    // The engine must be completely locked until the user imports firmware.
+    expect(!engine.isFirmwareLoaded(), "engine starts without firmware");
+    expect(engine.kitName(0) == "NO FIRMWARE", "kit names are locked without firmware");
+    expect(engine.patternName(0) == "NO FIRMWARE", "pattern names are locked without firmware");
+    engine.setPlaying(true);
+    expect(!engine.isPlaying(), "transport is locked without firmware");
+    engine.trigger(0, 1.0f);
+    expect(renderAndPeak(engine, 8192, buffer) < 0.0001f,
+           "locked engine is silent even after play and trigger");
+
+    expect(engine.installBankForTesting(rt8::makeTestBank()), "test bank installs");
+    expect(engine.isFirmwareLoaded(), "test bank reports as imported firmware");
+    expect(engine.getKitIndex() == 1, "default kit index is preserved");
+    expect(engine.getPatternIndex() == 103, "default pattern index is preserved");
+    expect(engine.kitName(1) == "Test Kit 002", "kit names are populated");
+    expect(engine.patternName(103) == "Test PTN 7-08", "pattern names are populated");
+    expect(!engine.toneName(0).empty(), "tone names are populated");
+
+    // Pattern data must be present once firmware content is installed.
     expect(engine.getStepVelocity(0, 0, 0) > 0, "default kick step is active");
     expect(engine.getStepVelocity(0, 1, 4) > 0, "default snare step is active");
 
-    std::vector<float> buffer(static_cast<size_t>(kFrames) * 2, 0.0f);
     const float silentPeak = renderAndPeak(engine, 4096, buffer);
     expect(silentPeak < 0.0001f, "engine is silent before transport starts");
 
@@ -109,7 +122,7 @@ int main() {
     // Pattern switching and kit loading remain sample-safe.
     engine.loadPattern(6, true);
     expect(engine.getPatternIndex() == 6, "pattern index updates");
-    expect(engine.kitName(engine.getKitIndex()) == "FM Hard Techno", "pattern loads its kit");
+    expect(engine.kitName(engine.getKitIndex()) == "Test Kit 007", "pattern loads its kit");
     const float switchPeak = renderAndPeak(engine, 8192, buffer);
     expect(switchPeak >= 0.0f, "pattern switch renders");
 
@@ -146,6 +159,32 @@ int main() {
     engine.setPlaying(false);
     engine.setMidiOutEnabled(true);
     engine.setTransportSend(true);
+
+    // Regression: sweeping the master DJ filter must stay finite and bounded.
+    // The old Chamberlin SVF went unstable at high cutoffs, produced NaNs and
+    // the reverb/delay feedback kept the whole bus corrupted (crackling).
+    engine.prepare(kSampleRate, kFrames);
+    engine.loadPattern(0, true);
+    engine.setPlaying(true);
+    float sweepPeak = 0.0f;
+    for (int i = 0; i <= 200; ++i) {
+        engine.setMasterParam(rt8::kMasterFilter, static_cast<float>(i) / 200.0f);
+        sweepPeak = std::max(sweepPeak, renderAndPeak(engine, 512, buffer));
+    }
+    engine.setMasterParam(rt8::kMasterFilter, 0.0f);
+    sweepPeak = std::max(sweepPeak, renderAndPeak(engine, kSampleRate * 2, buffer));
+    engine.setMasterParam(rt8::kMasterFilter, 1.0f);
+    sweepPeak = std::max(sweepPeak, renderAndPeak(engine, kSampleRate * 2, buffer));
+    engine.setMasterParam(rt8::kMasterFilter, 0.5f);
+    expect(sweepPeak <= 1.001f, "master filter output stays bounded");
+
+    // Clearing firmware silences and locks the engine again.
+    engine.setPlaying(true);
+    engine.clearFirmware();
+    expect(!engine.isFirmwareLoaded(), "clearing firmware locks the engine");
+    expect(!engine.isPlaying(), "clearing firmware stops the transport");
+    expect(renderAndPeak(engine, 8192, buffer) < 0.0001f,
+           "cleared engine stays silent");
 
     // Variation operations are atomic and complete.
     engine.copyVariation(0, 6);

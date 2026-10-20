@@ -88,6 +88,12 @@ public:
     bool isFirmwareLoaded() const;
     std::string firmwareName() const;
 
+#ifdef RT8_HOST_TESTS
+    // Host-test only helper: installs a synthetic bank without going through
+    // the firmware parser. Never compiled into the Android library.
+    bool installBankForTesting(FirmwareBank&& bank);
+#endif
+
     // Names (thread-safe; reads the immutable published bank)
     std::string kitName(int index) const;
     std::string patternName(int index) const;
@@ -147,6 +153,8 @@ private:
     void emitNote(int ch, float velocity, int64_t timestampNanos);
     void pushIn(const InEvent& event);
     bool popIn(InEvent& event);
+    void resetAudioState();
+    void clearPendingEvents();
     static int64_t nowNanos();
 
     double sampleRate_ = 48000.0;
@@ -181,6 +189,7 @@ private:
     std::atomic<bool> playing_ { false };
     std::atomic<bool> fill_ { false };
     std::atomic<bool> resetRequested_ { false };
+    std::atomic<bool> stateResetRequested_ { false };
     std::atomic<bool> scatterActive_ { false };
     std::atomic<int> scatterType_ { 1 };
 

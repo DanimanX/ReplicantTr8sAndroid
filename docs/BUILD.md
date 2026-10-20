@@ -47,18 +47,19 @@ cmake --build build-host -j
 
 `engine_tests` checks:
 
-- silence before transport starts
-- audible drums after play
+- the engine is locked and silent before firmware is imported
+- audible drums after a test bank is installed and play starts
 - MIDI note 36 triggers the bass drum
 - channel filter rejection
 - MIDI clock at 48 pulses per second at 120 BPM
 - variation copy/clear
+- a full master-filter sweep stays finite and bounded
 - no non-finite samples
 
-Render a 48-second demo with the engine:
+Render a 48-second demo with the engine (firmware image required):
 
 ```bash
-./build-host/render_demo assets/replicant_tr8s_android_demo.wav
+./build-host/render_demo .firmware/TR8S_UP.bin assets/replicant_tr8s_android_demo.wav
 ```
 
 ## Firmware parser test (bring your own firmware)
@@ -94,16 +95,19 @@ adb pull /sdcard/shot.png screenshots/shot.png
 
 Phone viewport: `1080x2400 @ 420 dpi`. Tablet portrait: `1600x2560 @ 240 dpi`. Tablet landscape: `2560x1600 @ 240 dpi`.
 
-The emulator reports AAudio **shared** mode and a 960-frame burst; the app's latency badge is therefore around 70–80 ms in the emulator. Real hardware with exclusive AAudio is the target.
+The emulator reports AAudio **shared** mode and a 960-frame burst; the app's latency badge is therefore around 70–80 ms in the emulator. Real hardware with exclusive AAudio is the target. The app starts on a firmware gate: import a user-supplied `TR8S_UP.bin` first, then the audio device opens.
 
 ## Promo video
 
 The promo uses the real screenshots and the native engine demo:
 
 ```bash
-./build-host/render_demo assets/replicant_tr8s_android_demo.wav
+./build-host/render_demo .firmware/TR8S_UP.bin assets/replicant_tr8s_android_demo.wav
 python3 tools/make_promo.py
 ```
+
+`render_demo` now requires a user-supplied firmware image; the engine has no built-in
+bank. The host tests use a synthetic, neutral test bank (`host/test_bank.h`) instead.
 
 Outputs:
 

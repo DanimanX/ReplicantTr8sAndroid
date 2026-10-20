@@ -13,7 +13,8 @@ add_library(rt8_engine STATIC
     ${ENGINE_DIR}/engine.cpp
 )
 target_include_directories(rt8_engine PUBLIC ${ENGINE_DIR})
-target_compile_options(rt8_engine PRIVATE -O2 -ffast-math -Wall -Wextra -Wno-unused-parameter)
+target_compile_options(rt8_engine PRIVATE -O2 -fno-math-errno -fno-trapping-math -Wall -Wextra -Wno-unused-parameter)
+target_compile_definitions(rt8_engine PUBLIC RT8_HOST_TESTS)
 
 add_executable(engine_tests engine_tests.cpp)
 target_link_libraries(engine_tests PRIVATE rt8_engine)

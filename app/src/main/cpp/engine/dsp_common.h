@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 
 namespace rt8 {
 
@@ -43,8 +44,25 @@ inline int clampi(int v, int lo, int hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
+// Bit-level checks. They stay correct even when the translation unit is built
+// with -ffast-math, where std::isfinite() may be folded away.
+inline bool isFiniteSample(float v) {
+    uint32_t bits = 0;
+    std::memcpy(&bits, &v, sizeof(bits));
+    return (bits & 0x7F800000u) != 0x7F800000u;
+}
+
+// Flush subnormal values to zero. Subnormals make the feedback paths (reverb
+// combs, delay lines, filters) run orders of magnitude slower on ARM and are a
+// classic source of intermittent audio dropouts.
+inline float flushDenormal(float v) {
+    uint32_t bits = 0;
+    std::memcpy(&bits, &v, sizeof(bits));
+    return ((bits & 0x7F800000u) == 0u) ? 0.0f : v;
+}
+
 inline float sanitize(float v) {
-    return std::isfinite(v) ? v : 0.0f;
+    return isFiniteSample(v) ? flushDenormal(v) : 0.0f;
 }
 
 struct StepCell {

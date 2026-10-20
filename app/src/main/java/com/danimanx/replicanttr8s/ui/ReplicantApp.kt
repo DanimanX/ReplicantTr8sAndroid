@@ -52,9 +52,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.danimanx.replicanttr8s.BuildConfig
 import com.danimanx.replicanttr8s.MainViewModel
 import com.danimanx.replicanttr8s.ui.components.AppHeader
 import com.danimanx.replicanttr8s.ui.components.TempoDialog
+import com.danimanx.replicanttr8s.ui.screens.EngineBootScreen
+import com.danimanx.replicanttr8s.ui.screens.FirmwareGateScreen
 import com.danimanx.replicanttr8s.ui.screens.KitScreen
 import com.danimanx.replicanttr8s.ui.screens.MidiScreen
 import com.danimanx.replicanttr8s.ui.screens.MixerScreen
@@ -82,6 +85,8 @@ fun ReplicantApp(windowSizeClass: WindowSizeClass, viewModel: MainViewModel) {
     val scope by viewModel.scope.collectAsStateWithLifecycle()
     val catalog by viewModel.catalog.collectAsStateWithLifecycle()
     val midiState by viewModel.midiState.collectAsStateWithLifecycle()
+    val importing by viewModel.importing.collectAsStateWithLifecycle()
+    val firmwareMessage by viewModel.firmwareMessage.collectAsStateWithLifecycle()
 
     val expanded = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Expanded
     val compactHeader = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Expanded
@@ -129,7 +134,14 @@ fun ReplicantApp(windowSizeClass: WindowSizeClass, viewModel: MainViewModel) {
                 )
             }
     ) {
-        Scaffold(
+        when {
+            !state.ready -> EngineBootScreen()
+            !state.firmwareLoaded -> FirmwareGateScreen(
+                importing = importing,
+                message = firmwareMessage ?: state.engineError,
+                onImport = { viewModel.importFirmware(it) }
+            )
+            else -> Scaffold(
             containerColor = Color.Transparent,
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             snackbarHost = {
@@ -217,6 +229,7 @@ fun ReplicantApp(windowSizeClass: WindowSizeClass, viewModel: MainViewModel) {
                 }
             }
         }
+        }
     }
 
     if (tempoDialog) {
@@ -289,7 +302,7 @@ private fun Rt8Rail(
             color = TextMuted
         )
         Text(
-            "v1.0",
+            "v${BuildConfig.VERSION_NAME}",
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.sp),
             color = TextMuted
         )

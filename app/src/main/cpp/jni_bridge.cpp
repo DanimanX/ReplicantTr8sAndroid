@@ -432,7 +432,7 @@ Java_com_danimanx_replicanttr8s_audio_NativeEngine_nativeKitToneId(JNIEnv*, jobj
 
 JNIEXPORT jstring JNICALL
 Java_com_danimanx_replicanttr8s_audio_NativeEngine_nativeVersion(JNIEnv* env, jobject) {
-    return env->NewStringUTF("ReplicantTR8S Android engine 1.0.0");
+    return env->NewStringUTF("ReplicantTR8S Android engine 1.0.1");
 }
 
 } // extern "C"

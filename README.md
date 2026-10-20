@@ -56,8 +56,9 @@
 - **Adaptive layout** for phones in portrait and tablets in portrait or landscape.
 - **Built-in donation button** (☕ amber control in the header) that opens the project's PayPal page.
 - **Bring-your-own firmware**: import `tr8s_sys_v300.zip` or `TR8S_UP.bin` to unlock the 128 factory kits, 128 patterns and 522 tones. No proprietary firmware or factory tables are distributed with this repository.
+- **Locked until firmware is imported**: the app starts silent, the transport is disabled and the UI shows a firmware gate. The engine only produces audio after a valid user-supplied image is parsed.
 
-The app runs a complete 11-channel drum engine (808 / 909 / 707 / 727 / 606 / CR-78 / FM / PCM-style voices), a 16-step sequencer with 8 variations and accent/flam programming, per-channel reverb/delay sends, a master bus with drive, filter and AIRA-style scatter, and a live scope.
+Once unlocked, the app runs a complete 11-channel drum engine (808 / 909 / 707 / 727 / 606 / CR-78 / FM / PCM-style voices), a 16-step sequencer with 8 variations and accent/flam programming, per-channel reverb/delay sends, a master bus with drive, filter and AIRA-style scatter, and a live scope.
 
 ---
 
@@ -71,18 +72,24 @@ The app runs a complete 11-channel drum engine (808 / 909 / 707 / 727 / 606 / CR
 - Per-channel `TUNE`, `DECAY`, `CTRL`, `LEVEL` (150 ceiling), `PAN`, reverb send, delay send.
 - 16-step sequencer, 8 variations (`A–H`), accent row, flam substeps, shuffle, fill-in.
 - 128 kits / 128 patterns / 522 tones when a TR-8S v3.00 firmware image is imported.
-- Built-in preview kits and patterns work out of the box without firmware.
+- No built-in kit, pattern or tone content: without an imported image the engine is silent and the transport is locked.
 - Master bus: tempo-synced delay, stereo reverb, DJ filter, analog drive/limiter, 8 scatter types.
 
-### Low latency
+### Low latency and glitch-free audio
 
 - **Oboe 1.9.3** output stream with `PerformanceMode::LowLatency`.
-- Tries **AAudio + exclusive mode + 48 kHz + one-burst buffer** first; falls back to shared AAudio, device-default rate, then OpenSL ES.
-- Float32 stereo output, 48 kHz target, no allocations or locks in the audio callback.
+- Tries **AAudio + exclusive mode at the device's native sample rate first** (the MMAP fast path), then exclusive at 48 kHz, then shared AAudio at the native/48 kHz rate, then OpenSL ES.
+- One-burst buffer when exclusive mode is granted; two bursts in shared mode, where AAudio enforces that minimum anyway.
+- **Adaptive buffer**: if the device reports underruns, the driver grows the buffer one burst at a time (up to four) instead of leaving the stream permanently crackling.
+- The audio callback only renders. Stream timestamps, xrun counters and buffer queries run on the UI thread, because even a short HAL query inside the callback can miss the deadline.
+- Float32 stereo output, no allocations or locks in the audio callback.
 - Parameter changes are atomics; step edits are atomic pattern cells; MIDI input/output uses ring buffers.
 - MIDI events are timestamped against the audio clock (including output latency compensation) for tight external sync.
+- The master DJ filter uses a topology-preserving (TPT) state-variable filter with block-rate coefficients; the previous Chamberlin form could go unstable at high cutoffs and fill the reverb/delay feedback with NaNs.
+- Non-finite samples are dropped at every feedback boundary, denormals are flushed to zero, and the master bus self-recovers by clearing its FX state instead of passing a NaN tail through forever.
+- The silent-clock fallback ticker is suspended while the Oboe callback owns the engine, and the two renderers can no longer overlap.
 
-> Latency is device- and firmware-dependent. The emulator used for verification opened AAudio in **shared** mode with a 960-frame burst and reported roughly **74 ms**; that number is not representative of a real phone with exclusive AAudio. The app surfaces the actual sample rate, API, sharing mode, buffer size and latency in the UI instead of promising a fixed figure.
+> Latency is device- and firmware-dependent. The emulator used for verification opened AAudio in **shared** mode with a 960-frame burst and reported roughly **74 ms**; that number is not representative of a real phone. The app surfaces the actual sample rate, API, sharing mode, buffer size and latency in the UI instead of promising a fixed figure. On real hardware, exclusive AAudio is what moves the reported figure below the ~20 ms shared-mode floor.
 
 ### USB MIDI
 
@@ -175,14 +182,33 @@ Full instructions, including emulator screenshots and CI, are in [docs/BUILD.md]
 
 ## Firmware (bring your own)
 
-The app does **not** embed, download or redistribute Roland firmware. To unlock the factory library:
+The app does **not** embed, download or redistribute Roland firmware. Without a user-supplied image the engine is locked: the startup screen asks for firmware and no audio is produced.
 
 1. Obtain `tr8s_sys_v300.zip` (or `TR8S_UP.bin`) from your own TR-8S v3.00 update.
-2. Open **KITS → IMPORT FIRMWARE** and select the file.
+2. On the **FIRMWARE REQUIRED** screen, or later in **KITS → IMPORT FIRMWARE**, select the file.
 3. The app parses the POSIX TAR container, decompresses the LZSS `rpg42_init_param.bin`, and builds the kit, pattern and tone tables in memory.
 4. The parsed binary is stored only in the app's private storage for subsequent launches.
+5. Clearing the firmware locks the engine again and deletes the stored image.
 
 The parser was verified during development with a user-supplied `tr8s_sys_v300.zip`; the resulting app reported **128 kits, 128 patterns and 522 tones**, and the factory pattern rendered audio through the engine. Firmware files are ignored by git.
+
+---
+
+## What's new in 1.0.1
+
+- **Fixed intermittent audio crackling.** The master DJ filter went unstable at high cutoffs
+  and produced NaNs; the reverb/delay feedback then kept the whole master bus corrupted.
+  The filter is now a stable TPT state-variable design, non-finite samples are dropped at
+  every feedback boundary, denormals are flushed, and the master bus self-recovers.
+- **Lower latency on real devices.** Exclusive AAudio is attempted at the device's native
+  sample rate first (avoiding a forced resampler), the buffer is one burst in exclusive mode,
+  and it grows adaptively only when the device reports underruns. Stream metrics no longer
+  run inside the audio callback.
+- **The engine is locked until firmware is imported.** The app no longer starts a preview
+  kit or pattern bank: without a user-supplied TR-8S v3.00 image the UI shows a firmware
+  gate, the transport is disabled and the native engine outputs silence. This removes the
+  built-in content entirely.
+- Version `1.0.1` (`versionCode` `10001`).
 
 ---
 
@@ -190,14 +216,14 @@ The parser was verified during development with a user-supplied `tr8s_sys_v300.z
 
 | Check | Result |
 | --- | --- |
-| Native host engine tests | PASS — silence before play, audio after play, MIDI note trigger, channel filter, transport/clock output, 24 PPQN timing, variation edits |
-| Firmware parser (user-supplied v3.00) | PASS — 128 kits, 128 patterns, 522 tones, factory pattern renders |
+| Native host engine tests | PASS — locked and silent without firmware, audio after installing a test bank, MIDI note trigger, channel filter, transport/clock output, 24 PPQN timing, variation edits, full master-filter sweep stays finite and bounded |
+| Firmware parser (user-supplied v3.00) | PASS — 128 kits, 128 patterns, 522 tones, factory pattern renders, no non-finite samples |
 | Android unit tests | PASS — 14 tests: MIDI running status, realtime interleaving, SysEx skip, UMP encode/decode, model invariants |
 | Android build | PASS — `assembleDebug` + `testDebugUnitTest` locally and in GitHub Actions (green run, debug APK artifact) |
-| Android release executable | PASS — `assembleRelease` + `bundleRelease` produce a signed APK/AAB; version `1.0.0` (versionCode `10000`), native ABIs arm64-v8a + x86_64 |
-| Release automation | PASS — tag `1.0.0` triggers the release workflow and publishes the APK, AAB and checksums as GitHub Release assets |
+| Android release executable | PASS — `assembleRelease` + `bundleRelease` produce a signed APK/AAB; version `1.0.1` (versionCode `10001`), native ABIs arm64-v8a + x86_64 |
+| Release automation | Tag `1.0.1` triggers the release workflow (verified for `1.0.0`), which publishes the APK, AAB and checksums as GitHub Release assets |
 | Donation button | PASS — header button (icon on phones, "DONATE A COFFEE" on tablets) launches `https://paypal.me/DanimanX` in the browser; verified from logcat |
-| App on emulator | PASS — AAudio stream opens, sequencer runs, steps edit, firmware import, screenshots captured for phone/tablet |
+| App on emulator | PASS — firmware gate blocks the app until import, then AAudio opens, the sequencer runs, steps edit, screenshots captured for phone/tablet |
 | USB MIDI hardware | Not available in this environment. The MIDI menu, parser, UMP codec and clock engine are unit-tested; hardware validation is the next external step. |
 
 ---

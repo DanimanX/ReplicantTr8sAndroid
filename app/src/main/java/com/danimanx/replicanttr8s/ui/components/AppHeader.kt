@@ -122,7 +122,7 @@ fun AppHeader(
                     )
                     StatusChip(
                         "FW",
-                        if (state.firmwareLoaded) "V3.00" else "PREVIEW",
+                        if (state.firmwareLoaded) "V3.00" else "NONE",
                         Amber,
                         active = state.firmwareLoaded
                     )
@@ -300,7 +300,7 @@ private fun StatusRow(state: EngineUiState, midi: MidiUiState) {
             Violet,
             active = midi.inputConnected || midi.outputConnected
         )
-        StatusChip("FW", if (state.firmwareLoaded) "V3.00" else "PREVIEW", Amber, active = state.firmwareLoaded)
+        StatusChip("FW", if (state.firmwareLoaded) "V3.00" else "NONE", Amber, active = state.firmwareLoaded)
         if (state.clockReceive) {
             StatusChip(
                 "EXT",

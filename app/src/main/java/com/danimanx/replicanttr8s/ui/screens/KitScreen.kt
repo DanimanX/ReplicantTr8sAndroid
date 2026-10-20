@@ -179,7 +179,7 @@ fun KitScreen(
             title = { Text("Clear imported firmware?", color = TextPrimary) },
             text = {
                 Text(
-                    "The app will return to the built-in preview kits and patterns. Your firmware file will be deleted from app storage.",
+                    "The engine will lock and stay silent until you import firmware again. Your firmware file will be deleted from app storage.",
                     color = TextSecondary
                 )
             },
@@ -234,7 +234,7 @@ private fun CurrentKitCard(state: EngineUiState, engine: EngineController, catal
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            TinyTag(if (state.firmwareLoaded) "FW V3.00" else "PREVIEW", if (state.firmwareLoaded) Green else Amber)
+            TinyTag(if (state.firmwareLoaded) "FW V3.00" else "NO FW", if (state.firmwareLoaded) Green else Amber)
         }
         Spacer(Modifier.height(10.dp))
         Row(
@@ -283,7 +283,7 @@ private fun FirmwareCard(
             Spacer(Modifier.width(9.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    if (state.firmwareLoaded) "TR-8S v3.00 FIRMWARE LOADED" else "FIRMWARE // BRING YOUR OWN",
+                    if (state.firmwareLoaded) "TR-8S v3.00 FIRMWARE LOADED" else "FIRMWARE REQUIRED // ENGINE LOCKED",
                     style = MaterialTheme.typography.titleSmall,
                     color = if (state.firmwareLoaded) Green else Amber
                 )

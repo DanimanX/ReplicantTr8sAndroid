@@ -22,10 +22,9 @@ constexpr uint8_t kSongPosition = 0xF2;
 } // namespace
 
 Engine::Engine() {
-    auto preview = std::make_unique<FirmwareBank>();
-    buildPreviewBank(*preview);
-    bankStorage_.push_back(std::move(preview));
-    bank_.store(bankStorage_.back().get(), std::memory_order_release);
+    // No bank is installed until the user imports a firmware image. The engine
+    // therefore cannot produce any sound (and the transport stays locked)
+    // without user-supplied content.
 
     for (int v = 0; v < kNumVariations; ++v)
         for (int t = 0; t < kNumTracks; ++t)
@@ -141,6 +140,14 @@ void Engine::process(float* interleavedStereo, int frames, int64_t blockStartNan
     }
 
     const FirmwareBank* b = bank();
+    if (b == nullptr) {
+        // Locked: no firmware, no audio and no transport movement.
+        std::fill(interleavedStereo, interleavedStereo + static_cast<size_t>(frames) * 2, 0.0f);
+        if (stateResetRequested_.exchange(false, std::memory_order_relaxed)) resetAudioState();
+        return;
+    }
+
+    if (stateResetRequested_.exchange(false, std::memory_order_relaxed)) resetAudioState();
     applyBlockConfig(b);
 
     const int64_t start = blockStartNanos > 0 ? blockStartNanos : nowNanos();
@@ -266,6 +273,11 @@ void Engine::process(float* interleavedStereo, int frames, int64_t blockStartNan
             float chL = 0.0f;
             float chR = 0.0f;
             v.renderNextSample(chL, chR);
+            if (!isFiniteSample(chL) || !isFiniteSample(chR)) {
+                // Drop a numerically broken voice instead of letting it poison
+                // the reverb/delay/scatter feedback buffers.
+                continue;
+            }
             if (!audible[ch]) continue;
 
             mixL += chL;
@@ -285,11 +297,12 @@ void Engine::process(float* interleavedStereo, int frames, int64_t blockStartNan
         interleavedStereo[static_cast<size_t>(i) * 2] = mixL;
         interleavedStereo[static_cast<size_t>(i) * 2 + 1] = mixR;
 
-        const float masterPeak = std::max(std::abs(mixL), std::abs(mixR));
-        if (masterPeak > masterPeakL_.load(std::memory_order_relaxed))
-            masterPeakL_.store(masterPeak, std::memory_order_relaxed);
-        if (masterPeak > masterPeakR_.load(std::memory_order_relaxed))
-            masterPeakR_.store(masterPeak, std::memory_order_relaxed);
+        const float masterPeakL = std::abs(mixL);
+        const float masterPeakR = std::abs(mixR);
+        if (masterPeakL > masterPeakL_.load(std::memory_order_relaxed))
+            masterPeakL_.store(masterPeakL, std::memory_order_relaxed);
+        if (masterPeakR > masterPeakR_.load(std::memory_order_relaxed))
+            masterPeakR_.store(masterPeakR, std::memory_order_relaxed);
 
         if ((i & 15) == 0) {
             scopeRing_[static_cast<size_t>(sWrite)].store(0.5f * (mixL + mixR),
@@ -547,7 +560,7 @@ void Engine::pushMidiMessage(uint8_t status, uint8_t data1, uint8_t data2, int64
 }
 
 void Engine::trigger(int ch, float velocity, bool flam) {
-    if (!validChannel(ch)) return;
+    if (!validChannel(ch) || bank() == nullptr) return;
     InEvent ev {};
     ev.kind = 1;
     ev.status = 0;
@@ -559,6 +572,7 @@ void Engine::trigger(int ch, float velocity, bool flam) {
 }
 
 void Engine::setPlaying(bool play) {
+    if (play && bank() == nullptr) return;
     if (play) {
         resetRequested_.store(true, std::memory_order_relaxed);
         playing_.store(true, std::memory_order_relaxed);
@@ -719,6 +733,10 @@ bool Engine::loadFirmware(const uint8_t* data, size_t size, std::string& error) 
         bankStorage_.push_back(std::move(candidate));
         bank_.store(bankStorage_.back().get(), std::memory_order_release);
     }
+    clearPendingEvents();
+    stateResetRequested_.store(true, std::memory_order_relaxed);
+    resetRequested_.store(true, std::memory_order_relaxed);
+    playing_.store(false, std::memory_order_relaxed);
     const int kit = kitIndex_.load(std::memory_order_relaxed);
     const int pattern = patternIndex_.load(std::memory_order_relaxed);
     loadKit(kit);
@@ -727,18 +745,59 @@ bool Engine::loadFirmware(const uint8_t* data, size_t size, std::string& error) 
 }
 
 void Engine::clearFirmware() {
-    auto preview = std::make_unique<FirmwareBank>();
-    buildPreviewBank(*preview);
     {
         std::lock_guard<std::mutex> lock(bankMutex_);
-        bankStorage_.push_back(std::move(preview));
+        bank_.store(nullptr, std::memory_order_release);
+    }
+    clearPendingEvents();
+    playing_.store(false, std::memory_order_relaxed);
+    resetRequested_.store(true, std::memory_order_relaxed);
+    stateResetRequested_.store(true, std::memory_order_relaxed);
+    playheadStep_.store(0, std::memory_order_relaxed);
+}
+
+void Engine::clearPendingEvents() {
+    // Discard events queued while the engine was locked; the ring is
+    // multi-producer/one-consumer and every index is atomic.
+    inTail_.store(inHead_.load(std::memory_order_acquire), std::memory_order_release);
+}
+
+void Engine::resetAudioState() {
+    const FirmwareBank* b = bank();
+    for (auto& v : voices_) {
+        v.reset();
+        v.setBank(b);
+    }
+    masterBus_.reset();
+    sampleCounterInStep_ = 0.0;
+    samplesUntilClock_ = 0.0;
+    clockPulse_ = 0;
+    clockTickCount_ = 0;
+    lastClockNanos_ = 0;
+    lastPlaying_ = false;
+    wasClockReceive_ = false;
+    for (int& tone : lastToneApplied_) tone = -1;
+    for (auto& meter : meters_) meter.store(0.0f, std::memory_order_relaxed);
+    masterPeakL_.store(0.0f, std::memory_order_relaxed);
+    masterPeakR_.store(0.0f, std::memory_order_relaxed);
+}
+
+#ifdef RT8_HOST_TESTS
+bool Engine::installBankForTesting(FirmwareBank&& bank) {
+    auto candidate = std::make_unique<FirmwareBank>(std::move(bank));
+    {
+        std::lock_guard<std::mutex> lock(bankMutex_);
+        bankStorage_.push_back(std::move(candidate));
         bank_.store(bankStorage_.back().get(), std::memory_order_release);
     }
-    const int kit = kitIndex_.load(std::memory_order_relaxed);
-    const int pattern = patternIndex_.load(std::memory_order_relaxed);
-    loadKit(kit);
-    loadPattern(pattern, false);
+    clearPendingEvents();
+    stateResetRequested_.store(true, std::memory_order_relaxed);
+    playing_.store(false, std::memory_order_relaxed);
+    loadKit(kitIndex_.load(std::memory_order_relaxed));
+    loadPattern(patternIndex_.load(std::memory_order_relaxed), false);
+    return true;
 }
+#endif
 
 bool Engine::isFirmwareLoaded() const {
     const FirmwareBank* b = bank();
@@ -752,14 +811,14 @@ std::string Engine::firmwareName() const {
 
 std::string Engine::kitName(int index) const {
     const FirmwareBank* b = bank();
-    if (b == nullptr) return "None";
+    if (b == nullptr) return "NO FIRMWARE";
     index = clampi(index, 0, kNumKits - 1);
     return std::string(b->kits[index].name);
 }
 
 std::string Engine::patternName(int index) const {
     const FirmwareBank* b = bank();
-    if (b == nullptr) return "None";
+    if (b == nullptr) return "NO FIRMWARE";
     index = clampi(index, 0, kNumPatterns - 1);
     return std::string(b->patterns[index].name);
 }
@@ -773,7 +832,7 @@ std::string Engine::patternCode(int index) const {
 
 std::string Engine::toneName(int index) const {
     const FirmwareBank* b = bank();
-    if (b == nullptr) return "None";
+    if (b == nullptr) return "NO FIRMWARE";
     index = clampi(index, 0, kNumTones - 1);
     return std::string(b->tones[index].name);
 }

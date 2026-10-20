@@ -41,6 +41,14 @@ class EngineModelsTest {
     }
 
     @Test
+    fun `engine starts locked until firmware is imported`() {
+        val state = EngineUiState()
+        assertFalse(state.firmwareLoaded)
+        assertEquals("NO FIRMWARE", state.patternName)
+        assertEquals("--", state.patternCode)
+    }
+
+    @Test
     fun `channel table matches the GM drum map`() {
         assertEquals(11, ChannelShortNames.size)
         assertEquals(36, ChannelNotes[0])

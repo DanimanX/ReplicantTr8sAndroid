@@ -55,11 +55,8 @@ struct FirmwareBank {
     FirmwarePattern patterns[kNumPatterns] {};
     bool loaded = false;
     bool imported = false;
-    char name[48] = "Built-in preview";
+    char name[48] = "No firmware";
 };
-
-// Fills the bank with the clean-room preview content that ships with the app.
-void buildPreviewBank(FirmwareBank& bank);
 
 // Parses a raw rpg42_init_param.bin or a POSIX TAR (TR8S_UP.bin) image.
 // The .zip container is unpacked by the Android layer before it gets here.

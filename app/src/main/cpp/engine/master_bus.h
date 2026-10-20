@@ -14,7 +14,7 @@ public:
 
     void setReverbLevel(float v) { reverbLevel = clampf(v, 0.0f, 1.0f); }
     void setDelayLevel(float v) { delayLevel = clampf(v, 0.0f, 1.0f); }
-    void setMasterFxFilter(float v) { masterFilter = clampf(v, 0.0f, 1.0f); }
+    void setMasterFxFilter(float v);
     void setMasterDrive(float v) { masterDrive = clampf(v, 0.0f, 1.0f); }
     void setMasterVolume(float v) { masterVolume = clampf(v, 0.0f, 1.2f); }
 
@@ -37,6 +37,8 @@ public:
     float getVolume() const { return masterVolume; }
 
 private:
+    void updateFilterCoefficients();
+
     double sampleRate = 44100.0;
     double currentBpm = 128.0;
 
@@ -56,8 +58,15 @@ private:
 
     Reverb reverb;
 
-    float svfLpL = 0.0f, svfBpL = 0.0f;
-    float svfLpR = 0.0f, svfBpR = 0.0f;
+    // Stable topology-preserving (TPT) state-variable filter. The previous
+    // Chamberlin SVF went unstable at high cutoffs, produced NaNs, and the
+    // reverb/delay feedback loops then kept the whole bus full of NaNs.
+    bool filterBypass = true;
+    bool filterHighPass = false;
+    float filterK = 0.8f;
+    float filterA1 = 0.0f, filterA2 = 0.0f, filterA3 = 0.0f;
+    float svfIc1L = 0.0f, svfIc2L = 0.0f;
+    float svfIc1R = 0.0f, svfIc2R = 0.0f;
 
     std::vector<float> scatterBufL, scatterBufR;
     int scatterWritePos = 0;

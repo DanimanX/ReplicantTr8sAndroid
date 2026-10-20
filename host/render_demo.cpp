@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <string>
 #include <vector>
 
 #include "engine.h"
@@ -41,13 +42,42 @@ void writeWav(const char* path, const std::vector<float>& interleaved, int sampl
 } // namespace
 
 int main(int argc, char** argv) {
-    const char* out = argc > 1 ? argv[1] : "replicant_tr8s_android_demo.wav";
+    if (argc < 2) {
+        std::fprintf(stderr, "usage: render_demo <TR8S_UP.bin> [out.wav]\n");
+        return 2;
+    }
+    const char* firmwarePath = argv[1];
+    const char* out = argc > 2 ? argv[2] : "replicant_tr8s_android_demo.wav";
     constexpr int kSampleRate = 48000;
     constexpr int kFrames = 512;
     constexpr double kDuration = 48.0;
 
     rt8::Engine engine;
     engine.prepare(kSampleRate, kFrames);
+
+    {
+        FILE* fw = std::fopen(firmwarePath, "rb");
+        if (fw == nullptr) {
+            std::perror(firmwarePath);
+            return 2;
+        }
+        std::fseek(fw, 0, SEEK_END);
+        const long size = std::ftell(fw);
+        std::fseek(fw, 0, SEEK_SET);
+        std::vector<uint8_t> bytes(static_cast<size_t>(size));
+        if (std::fread(bytes.data(), 1, bytes.size(), fw) != bytes.size()) {
+            std::fprintf(stderr, "could not read %s\n", firmwarePath);
+            std::fclose(fw);
+            return 2;
+        }
+        std::fclose(fw);
+        std::string error;
+        if (!engine.loadFirmware(bytes.data(), bytes.size(), error)) {
+            std::fprintf(stderr, "firmware parse failed: %s\n", error.c_str());
+            return 1;
+        }
+        std::printf("firmware: %s\n", engine.firmwareName().c_str());
+    }
     engine.setMasterParam(rt8::kMasterVolume, 0.88f);
     engine.setMasterParam(rt8::kMasterReverb, 0.45f);
     engine.setMasterParam(rt8::kMasterDelay, 0.32f);
@@ -108,7 +138,18 @@ int main(int argc, char** argv) {
         frame += n;
     }
 
-    // Normalize to -1 dBFS.
+    // Normalize to -1 dBFS. Drop any non-finite sample instead of letting the
+    // int16 writer turn it into a full-scale click.
+    long nonFinite = 0;
+    for (float& v : interleaved) {
+        if (!std::isfinite(v)) {
+            v = 0.0f;
+            ++nonFinite;
+        }
+    }
+    if (nonFinite > 0) {
+        std::fprintf(stderr, "warning: dropped %ld non-finite samples\n", nonFinite);
+    }
     float peak = 0.0f;
     for (float v : interleaved) peak = std::max(peak, std::abs(v));
     if (peak > 0.0001f) {

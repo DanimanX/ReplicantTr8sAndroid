@@ -6,6 +6,8 @@
 #include <cstddef>
 #include <vector>
 
+#include "dsp_common.h"
+
 namespace rt8 {
 
 // Freeverb-style stereo reverb, tuned for a dense, dark drum-room tail.
@@ -71,8 +73,8 @@ private:
         }
         float process(float input, float feedback, float damping) {
             const float output = buffer[index];
-            store = output + (store - output) * damping;
-            buffer[index] = input + store * feedback;
+            store = flushDenormal(output + (store - output) * damping);
+            buffer[index] = flushDenormal(input + store * feedback);
             if (++index >= buffer.size()) index = 0;
             return output;
         }
@@ -90,7 +92,7 @@ private:
         float process(float input) {
             const float buffered = buffer[index];
             const float output = buffered - input;
-            buffer[index] = input + buffered * 0.5f;
+            buffer[index] = flushDenormal(input + buffered * 0.5f);
             if (++index >= buffer.size()) index = 0;
             return output;
         }
