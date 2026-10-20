@@ -1,0 +1,31 @@
+# Android / Gradle
+.gradle/
+build/
+app/build/
+local.properties
+.cxx/
+.externalNativeBuild/
+captures/
+*.apk
+*.aab
+*.iml
+.idea/
+.codewhale/
+.kotlin/
+
+# Native
+build-host/
+compile_commands.json
+
+# User-supplied proprietary firmware (never commit)
+.firmware/
+firmware/
+tr8s_sys_v300.zip
+TR8S_UP.bin
+*.bin
+
+# OS / tools
+.DS_Store
+__pycache__/
+*.pyc
+.vscode/

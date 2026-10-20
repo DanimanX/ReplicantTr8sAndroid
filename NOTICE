@@ -1,0 +1,22 @@
+ReplicantTR8S Android
+Copyright (c) 2026 DanimanX
+
+This project is an Android port of ReplicantTr8s (MIT, DanimanX).
+
+Third-party components:
+
+- Oboe (https://github.com/google/oboe) — Apache License 2.0.
+  See assets/licenses/Oboe-LICENSE.txt.
+- AndroidX / Jetpack Compose — Apache License 2.0.
+  See https://developer.android.com/jetpack/androidx.
+- Roboto Condensed — Apache License 2.0.
+  See assets/licenses/Roboto-LICENSE.txt.
+- Freeverb-inspired reverb algorithm — public domain / MIT-compatible.
+- ReplicantTr8s DSP and firmware-loader concepts — MIT, DanimanX.
+
+No Roland firmware, ROM data, factory tables or other proprietary content is
+included in this repository. Firmware parsing is performed only on files
+provided by the user at runtime.
+
+TR-8S, TR-808, TR-909, TR-707, TR-727, TR-606 and CR-78 are trademarks of
+Roland Corporation. This project is not affiliated with or endorsed by Roland.
