@@ -1,0 +1,53 @@
+name: android
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK / NDK / CMake
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager --install \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "platform-tools" \
+            "ndk;27.0.12077973" \
+            "cmake;3.22.1"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Android build and unit tests
+        run: ./gradlew :app:assembleDebug :app:testDebugUnitTest --stacktrace
+
+      - name: Host DSP tests
+        run: |
+          cmake -S host -B build-host -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-host -j
+          ./build-host/engine_tests
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: replicant-tr8s-android-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
