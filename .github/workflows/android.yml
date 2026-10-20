@@ -20,13 +20,21 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install SDK / NDK / CMake
+      # The runner image already ships cmdline-tools. Installing the deprecated
+      # `tools` package through android-actions/setup-android now fails, so the
+      # SDK is configured directly instead.
+      - name: Configure Android SDK
         run: |
-          yes | sdkmanager --licenses >/dev/null
-          sdkmanager --install \
+          SDK_ROOT="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          SDKM="$(command -v sdkmanager || true)"
+          if [ -z "$SDKM" ]; then
+            SDKM="$(find "$SDK_ROOT/cmdline-tools" -maxdepth 3 -name sdkmanager -type f | head -1)"
+          fi
+          echo "Using $SDKM"
+          yes | "$SDKM" --licenses >/dev/null 2>&1 || true
+          "$SDKM" --install \
             "platforms;android-35" \
             "build-tools;35.0.0" \
             "platform-tools" \
