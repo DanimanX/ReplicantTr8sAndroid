@@ -59,8 +59,12 @@ fun AppHeader(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Brand(compact = true, modifier = Modifier.weight(1f))
+                DonateButton(compact = true)
                 BigPlayButton(
                     playing = state.playing,
                     onClick = onPlayToggle,
@@ -130,12 +134,18 @@ fun AppHeader(
                     )
                 }
             }
-            BigPlayButton(
-                playing = state.playing,
-                onClick = onPlayToggle,
-                accent = Cyan,
-                size = 52
-            )
+            Column(
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                DonateButton(compact = false)
+                BigPlayButton(
+                    playing = state.playing,
+                    onClick = onPlayToggle,
+                    accent = Cyan,
+                    size = 52
+                )
+            }
         }
     }
 }

@@ -28,6 +28,21 @@
   📦 <strong><a href="https://github.com/DanimanX/ReplicantTr8sAndroid/releases/latest">Download the Android APK (latest release)</a></strong>
 </p>
 
+<p align="center">
+  ReplicantTR8S Android is free and open source. If it earns a place in your setup and you
+  feel like saying thanks, you can buy me a coffee — completely optional.
+</p>
+
+<p align="center">
+  <a href="https://paypal.me/DanimanX?locale.x=en_US&amp;country.x=CL">
+    <img src="https://img.shields.io/badge/Donate-PayPal-00457C?logo=paypal&amp;logoColor=white&amp;style=for-the-badge" alt="Donate with PayPal">
+  </a>
+</p>
+
+<p align="center">
+  <sub><a href="https://paypal.me/DanimanX?locale.x=en_US&amp;country.x=CL">paypal.me/DanimanX</a></sub>
+</p>
+
 ---
 
 ## Overview
@@ -39,6 +54,7 @@
 - **JNI** bridge with lock-free MIDI input/output queues and atomic parameter state.
 - **USB MIDI** input and output, **MIDI 2.0 UMP** translation on Android 13+, 24 PPQN clock, transport sync and a live MIDI menu.
 - **Adaptive layout** for phones in portrait and tablets in portrait or landscape.
+- **Built-in donation button** (☕ amber control in the header) that opens the project's PayPal page.
 - **Bring-your-own firmware**: import `tr8s_sys_v300.zip` or `TR8S_UP.bin` to unlock the 128 factory kits, 128 patterns and 522 tones. No proprietary firmware or factory tables are distributed with this repository.
 
 The app runs a complete 11-channel drum engine (808 / 909 / 707 / 727 / 606 / CR-78 / FM / PCM-style voices), a 16-step sequencer with 8 variations and accent/flam programming, per-channel reverb/delay sends, a master bus with drive, filter and AIRA-style scatter, and a live scope.
@@ -180,6 +196,7 @@ The parser was verified during development with a user-supplied `tr8s_sys_v300.z
 | Android build | PASS — `assembleDebug` + `testDebugUnitTest` locally and in GitHub Actions (green run, debug APK artifact) |
 | Android release executable | PASS — `assembleRelease` + `bundleRelease` produce a signed APK/AAB; version `1.0.0` (versionCode `10000`), native ABIs arm64-v8a + x86_64 |
 | Release automation | PASS — tag `1.0.0` triggers the release workflow and publishes the APK, AAB and checksums as GitHub Release assets |
+| Donation button | PASS — header button (icon on phones, "DONATE A COFFEE" on tablets) launches `https://paypal.me/DanimanX` in the browser; verified from logcat |
 | App on emulator | PASS — AAudio stream opens, sequencer runs, steps edit, firmware import, screenshots captured for phone/tablet |
 | USB MIDI hardware | Not available in this environment. The MIDI menu, parser, UMP codec and clock engine are unit-tested; hardware validation is the next external step. |
 
@@ -229,6 +246,25 @@ tools/                  Promo generator
 - Bluetooth MIDI and virtual MIDI ports.
 - Audio recording / export of the performance.
 - Android foreground-service polish for MIDI-only background use.
+
+---
+
+## ☕ Support the project
+
+ReplicantTR8S Android is free, MIT licensed and has no ads, tracking or paid tier.
+If it is useful to you in the studio, at rehearsal or on stage, you can support
+its development with a coffee:
+
+<p align="center">
+  <a href="https://paypal.me/DanimanX?locale.x=en_US&amp;country.x=CL">
+    <img src="https://img.shields.io/badge/☕_Donate_a_Coffee-PayPal.me%2FDanimanX-FFAA1A?style=for-the-badge&amp;logo=paypal&amp;logoColor=black" alt="PayPal Donate">
+  </a>
+</p>
+
+* **PayPal:** [https://paypal.me/DanimanX?locale.x=en_US&country.x=CL](https://paypal.me/DanimanX?locale.x=en_US&country.x=CL)
+
+The same button is built into the app: the amber **☕ DONATE A COFFEE** control in
+the header (icon-only on phones) opens the PayPal page in your browser.
 
 ---
 
