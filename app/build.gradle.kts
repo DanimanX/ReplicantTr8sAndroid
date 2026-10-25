@@ -5,8 +5,8 @@ plugins {
 }
 
 // Version can be overridden by CI: -PreplicantVersionName=1.0.0 -PreplicantVersionCode=10000
-val replicantVersionName = (project.findProperty("replicantVersionName") as String?) ?: "1.0.1"
-val replicantVersionCode = ((project.findProperty("replicantVersionCode") as String?) ?: "10001").toInt()
+val replicantVersionName = (project.findProperty("replicantVersionName") as String?) ?: "1.0.2"
+val replicantVersionCode = ((project.findProperty("replicantVersionCode") as String?) ?: "10002").toInt()
 
 // Release signing. CI supplies a keystore through environment variables; local
 // and unsigned builds fall back to the debug key so every release APK installs.

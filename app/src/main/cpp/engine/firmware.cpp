@@ -20,31 +20,85 @@ struct ToneMeta {
 const ToneMeta kToneMeta[] = {
     {0, "808 Bass 1", 1, 1},
     {1, "808 Bass 2", 1, 1},
-    {2, "808 Long Bass", 1, 1},
+    {2, "808 Bass 1 Long", 1, 1},
+    {3, "808 Bass 2 Long", 1, 1},
     {4, "808 Snare 1", 2, 1},
     {5, "808 Snare 2", 2, 1},
     {6, "808 Low Tom", 3, 1},
     {7, "808 Mid Tom", 3, 1},
     {8, "808 High Tom", 3, 1},
+    {9, "808 Low Conga", 8, 1},
+    {10, "808 Mid Conga", 8, 1},
+    {11, "808 High Conga", 8, 1},
+    {12, "808 Noise Tom L", 3, 1},
+    {13, "808 Noise Tom M", 3, 1},
+    {14, "808 Noise Tom H", 3, 1},
     {15, "808 Rim Shot", 4, 1},
+    {16, "808 Claves", 9, 1},
     {17, "808 Hand Clap", 5, 1},
+    {18, "808 Maracas", 10, 1},
+    {19, "808 Finger Snap", 5, 1},
+    {20, "808 Noise Clap", 5, 1},
     {21, "808 Closed HH", 6, 1},
     {22, "808 Open HH", 6, 1},
-    {23, "808 Crash Cym", 7, 1},
+    {23, "808 Cymbal", 7, 1},
+    {24, "808 Gate Cymbal", 7, 1},
     {25, "808 Cowbell", 11, 1},
     {26, "909 Bass 1", 1, 1},
     {27, "909 Bass 2", 1, 1},
-    {28, "909 Snare 1", 2, 1},
-    {29, "909 Snare 2", 2, 1},
-    {30, "909 Low Tom", 3, 1},
-    {31, "909 Mid Tom", 3, 1},
-    {32, "909 High Tom", 3, 1},
+    {28, "909 Attack Bass", 1, 1},
+    {29, "909 Low Bass", 1, 1},
+    {30, "909 Snare 1", 2, 1},
+    {31, "909 Snare 2", 2, 1},
+    {32, "909 Attack Snare", 2, 1},
+    {33, "909 Low Tom", 3, 1},
+    {34, "909 Mid Tom", 3, 1},
+    {35, "909 High Tom", 3, 1},
     {36, "909 Rim Shot", 4, 1},
     {37, "909 Hand Clap", 5, 1},
     {38, "909 Closed HH", 6, 1},
     {39, "909 Open HH", 6, 1},
-    {40, "909 Crash Cym", 7, 1},
-    {41, "909 Ride Cym", 7, 1},
+    {40, "909 Crash Cymbal", 7, 1},
+    {41, "909 Ride Cymbal", 7, 1},
+    {42, "707 Bass 1", 1, 1},
+    {43, "707 Bass 2", 1, 1},
+    {44, "707 Snare 1", 2, 1},
+    {45, "707 Snare 2", 2, 1},
+    {46, "707 Low Tom", 3, 1},
+    {47, "707 Mid Tom", 3, 1},
+    {48, "707 High Tom", 3, 1},
+    {49, "707 Rim Shot", 4, 1},
+    {50, "707 Cowbell", 11, 1},
+    {51, "707 Hand Clap", 5, 1},
+    {52, "707 Tambourine", 10, 1},
+    {53, "707 Closed HH", 6, 1},
+    {54, "707 Open HH", 6, 1},
+    {55, "707 Crash Cymbal", 7, 1},
+    {56, "707 Ride Cymbal", 7, 1},
+    {57, "727 High Bongo", 8, 1},
+    {58, "727 Low Bongo", 8, 1},
+    {59, "727 Mute HiConga", 8, 1},
+    {60, "727 Open HiConga", 8, 1},
+    {61, "727 Low Conga", 8, 1},
+    {62, "727 High Timbale", 8, 1},
+    {63, "727 Low Timbale", 8, 1},
+    {64, "727 High Agogo", 11, 1},
+    {65, "727 Low Agogo", 11, 1},
+    {66, "727 Cabasa", 10, 1},
+    {67, "727 Maracas", 10, 1},
+    {68, "727 ShortWhistle", 12, 1},
+    {69, "727 Long Whistle", 12, 1},
+    {70, "727 Quijada", 12, 1},
+    {71, "727 Star Chime", 12, 1},
+    {72, "606 Bass", 1, 1},
+    {73, "606 Snare", 2, 1},
+    {74, "606 Low Tom", 3, 1},
+    {75, "606 Mid Tom", 3, 1},
+    {76, "606 High Tom", 3, 1},
+    {77, "606 Closed HH", 6, 1},
+    {78, "606 Open HH", 6, 1},
+    {79, "606 Cymbal", 7, 1},
+    {80, "606 Gate Cymbal", 7, 1},
     {81, "808 Conga L Morph", 8, 1},
     {82, "808 Conga M Morph", 8, 1},
     {83, "808 Conga H Morph", 8, 1},
@@ -148,6 +202,41 @@ void setCode(FirmwarePattern& p, int index) {
 
 } // namespace
 
+uint8_t inferToneCategory(int id) {
+    if (id >= 181 && id <= 205) return 1;  // PCM kicks
+    if (id >= 206 && id <= 248) return 2;  // PCM snares
+    if (id >= 249 && id <= 262) return 3;  // PCM toms
+    if (id >= 263 && id <= 270) return 4;  // PCM rim shots
+    if (id >= 271 && id <= 290) return 5;  // PCM claps / snaps
+    if (id >= 291 && id <= 315) return 6;  // PCM hi-hats
+    if (id >= 316 && id <= 322) return 7;  // PCM cymbals
+    if (id >= 323 && id <= 334) return 8;  // PCM congas / timbales
+    if (id >= 335 && id <= 340) return 9;  // PCM claves / blocks
+    if (id >= 341 && id <= 347) return 10; // PCM shakers / tambourines
+    if (id >= 348 && id <= 354) return 11; // PCM cowbells / agogos / triangles
+    if (id >= 355 && id <= 358) return 12; // Jingle / udu
+    if (id >= 359 && id <= 415) return 13; // FX / hits / zaps
+    if (id >= 416 && id <= 434) return 14; // Voice / formants
+    if (id >= 435 && id <= 450) return 15; // Synth leads / pads
+    if (id >= 451 && id <= 475) return 16; // OSC waveforms
+    if (id >= 476 && id <= 490) return 17; // Basses
+    if (id >= 491 && id <= 504) return 18; // Pianos / mallets / brass
+    if (id >= 505 && id <= 521) return 19; // Chords
+    return 1;
+}
+
+bool toneMetaForId(int toneId, ToneMetaInfo& out) {
+    for (const auto& meta : kToneMeta) {
+        if (meta.id == toneId) {
+            out.name = meta.name;
+            out.category = static_cast<uint8_t>(meta.category);
+            out.engineType = static_cast<uint8_t>(meta.engine);
+            return true;
+        }
+    }
+    return false;
+}
+
 namespace {
 
 uint32_t readLE32(const uint8_t* p) {
@@ -247,17 +336,15 @@ bool parseInitParamBin(const uint8_t* data, size_t size, FirmwareBank& bank, std
         tone.engineType = t[17];
 
         if (tone.name[0] == '\0') {
-            bool found = false;
-            for (const auto& meta : kToneMeta) {
-                if (meta.id == i) {
-                    std::snprintf(tone.name, sizeof(tone.name), "%s", meta.name);
-                    tone.category = static_cast<uint8_t>(meta.category);
-                    tone.engineType = static_cast<uint8_t>(meta.engine);
-                    found = true;
-                    break;
-                }
+            ToneMetaInfo meta;
+            if (toneMetaForId(i, meta)) {
+                std::snprintf(tone.name, sizeof(tone.name), "%s", meta.name);
+                tone.category = meta.category;
+                tone.engineType = meta.engineType;
+            } else {
+                std::snprintf(tone.name, sizeof(tone.name), "Tone %03d", i);
+                if (tone.category == 0) tone.category = inferToneCategory(i);
             }
-            if (!found) std::snprintf(tone.name, sizeof(tone.name), "Tone %03d", i);
         }
     }
 
@@ -269,6 +356,11 @@ bool parseInitParamBin(const uint8_t* data, size_t size, FirmwareBank& bank, std
         copyTrimmedAscii(kit.name, sizeof(kit.name), k, 16);
         if (kit.name[0] == '\0') std::snprintf(kit.name, sizeof(kit.name), "KIT %03d", kidx + 1);
 
+        // Kit master FX levels scale the per-channel sends. The classic vintage
+        // kits 1..6 ship them at 0, so those channels must stay completely dry.
+        const uint8_t kitRevMaster = k[0x46];
+        const uint8_t kitDlyMaster = k[0x6E];
+
         for (int ch = 0; ch < kNumChannels; ++ch) {
             const uint8_t* slot = k + 0x184 + static_cast<size_t>(ch) * 0x34;
             const uint8_t* fx = k + 0x3C0 + static_cast<size_t>(ch) * 0x20;
@@ -276,13 +368,16 @@ bool parseInitParamBin(const uint8_t* data, size_t size, FirmwareBank& bank, std
             const uint16_t tid = readLE16(slot);
             cp.toneId = (tid < kNumTones) ? tid : 0;
             cp.tune = slot[2];
-            cp.decay = slot[3];
+            // PCM tones store 255 for nominal full-sample decay; centre at 128.
+            cp.decay = (cp.toneId >= 181 && slot[3] >= 250) ? 128 : slot[3];
             cp.level = 150;
             cp.gain = slot[5];
             cp.pan = slot[6];
-            cp.revSend = slot[7];
-            cp.dlySend = slot[8];
-            cp.ctrl = slot[28];
+            cp.revSend = static_cast<uint8_t>((static_cast<uint32_t>(slot[7]) * kitRevMaster) / 255u);
+            cp.dlySend = static_cast<uint8_t>((static_cast<uint32_t>(slot[8]) * kitDlyMaster) / 255u);
+            // Non-morph ACB and PCM tones store filter flags [24, 200] at
+            // slot[28..29]; centre CTRL instead of pinning it to the low end.
+            cp.ctrl = (slot[28] == 24 && slot[29] == 200) ? 128 : slot[28];
             cp.fxType = fx[0];
         }
     }

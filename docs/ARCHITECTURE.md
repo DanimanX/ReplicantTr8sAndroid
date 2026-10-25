@@ -59,6 +59,8 @@ Pattern grid (8 × 12 × 16 atomics) ──► step scheduler ──► 11 voice
 - 181–354: legacy PCM-style
 - 355–521: synth/PCM-style presets
 
+Each model follows the circuit topology of the machine it emulates: bridged-T networks with dual pitch envelopes for the 808/909 kicks, multi-burst clap stacks, six-oscillator Schmitt-trigger metal banks, Paiste modal ratios with a 32 kHz sample-and-hold and 6-bit quantiser for the 909 hats, and 25/28 kHz companding DAC emulation for the 707/626. Voices run a three-stage state-variable filter network, an output DC blocker and a tanh output stage, all bounded and denormal-flushed on the audio thread.
+
 The master bus is a stereo delay, Freeverb-style reverb, state-variable master filter, tanh drive and limiter.
 
 ## Firmware bank
@@ -73,7 +75,11 @@ The Android layer unzips the user's `.zip` with `java.util.zip`, then passes the
 
 1. POSIX TAR member lookup (`TR8S_UP.bin`).
 2. LZSS decompression of `rpg42_init_param.bin`.
-3. Fixed-offset parsing of TONE, KIT and PTN chunks.
+3. Fixed-offset parsing of the TONE, KIT and PTN chunks, including tone-name
+   fallback from built-in metadata plus an id-range category inference for PCM
+   tones, normalisation of PCM decay bytes (255 → the 128 centre) and filter-flag
+   `CTRL` bytes, and per-channel reverb/delay sends scaled by the kit's master
+   reverb/delay levels.
 4. Bank publication and reload of the current kit/pattern.
 
 No firmware-derived data is compiled into the binary and no preview or factory bank is built in. `Engine` starts with a null bank: `process()` writes silence, the transport stays stopped, and kit/pattern/tone names report `NO FIRMWARE` until the user imports an image. The JNI layer only exposes the parser, never a way to install bundled content.

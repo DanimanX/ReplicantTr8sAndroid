@@ -66,7 +66,7 @@ UMP packet layout and device support vary by manufacturer; if a UMP device does 
 | CC | 49 | Crash Cymbal 1 |
 | RC | 51 | Ride Cymbal 1 |
 
-Alternate GM notes are also accepted (35/36 for BD, 38/40 for SD, 41/43 for LT, 45/47 for MT, 48/50 for HT, 37/75 for RS, 42/44 for CH, 49/57 for CC, 51/56 for RC). Notes 60–70 map chromatically to the 11 channels.
+Alternate GM notes are also accepted (35/36 for BD, 38/40 for SD, 41/43 for LT, 45/47 for MT, 48/50 for HT, 37/75 for RS, 39/54 for HC, 42/44 for CH, 46/55 for OH, 49/52/57 for CC, 51/53/56/59 for RC). Notes 60–70 map chromatically to the 11 channels, and notes 24–34 map to the same channels one octave lower.
 
 ## MIDI CC
 

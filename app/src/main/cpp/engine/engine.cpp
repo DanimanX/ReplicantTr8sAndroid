@@ -38,8 +38,8 @@ Engine::Engine() {
         channelParams_[base + kCtrl].store(0.5f);
         channelParams_[base + kLevel].store(1.0f);
         channelParams_[base + kPan].store(0.5f);
-        channelParams_[base + kReverbSend].store(0.2f);
-        channelParams_[base + kDelaySend].store(0.1f);
+        channelParams_[base + kReverbSend].store(0.0f);
+        channelParams_[base + kDelaySend].store(0.0f);
         toneIds_[ch].store(0);
         muted_[ch].store(false);
         soloed_[ch].store(false);

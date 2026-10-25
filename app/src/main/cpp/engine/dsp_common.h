@@ -70,7 +70,7 @@ struct StepCell {
     uint8_t flags = 0;
 };
 
-// MIDI note -> engine channel (GM drum map plus chromatic C3..A3).
+// MIDI note -> engine channel (GM drum map, chromatic C3..A3 and C1..A1).
 inline int noteToChannel(int note) {
     switch (note) {
         case 35: case 36: return 0;
@@ -79,14 +79,15 @@ inline int noteToChannel(int note) {
         case 45: case 47: return 3;
         case 48: case 50: return 4;
         case 37: case 75: return 5;
-        case 39: return 6;
+        case 39: case 54: return 6;
         case 42: case 44: return 7;
-        case 46: return 8;
-        case 49: case 57: return 9;
-        case 51: case 56: return 10;
+        case 46: case 55: return 8;
+        case 49: case 52: case 57: return 9;
+        case 51: case 53: case 56: case 59: return 10;
         default: break;
     }
     if (note >= 60 && note < 60 + kNumChannels) return note - 60;
+    if (note >= 24 && note < 24 + kNumChannels) return note - 24;
     return -1;
 }
 

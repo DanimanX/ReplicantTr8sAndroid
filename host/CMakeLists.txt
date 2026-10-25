@@ -25,6 +25,14 @@ target_link_libraries(render_demo PRIVATE rt8_engine)
 add_executable(firmware_test firmware_test.cpp)
 target_link_libraries(firmware_test PRIVATE rt8_engine)
 
+add_executable(tone_sweep tone_sweep.cpp)
+target_link_libraries(tone_sweep PRIVATE rt8_engine)
+
+add_executable(firmware_synthetic_test firmware_synthetic_test.cpp)
+target_link_libraries(firmware_synthetic_test PRIVATE rt8_engine)
+
 enable_testing()
 add_test(NAME engine_tests COMMAND engine_tests)
+add_test(NAME tone_sweep COMMAND tone_sweep)
+add_test(NAME firmware_synthetic_test COMMAND firmware_synthetic_test)
 add_test(NAME firmware_test COMMAND firmware_test ${CMAKE_CURRENT_SOURCE_DIR}/../.firmware/TR8S_UP.bin)

@@ -52,6 +52,8 @@ jobs:
           cmake -S host -B build-host -DCMAKE_BUILD_TYPE=Release
           cmake --build build-host -j
           ./build-host/engine_tests
+          ./build-host/tone_sweep
+          ./build-host/firmware_synthetic_test
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4

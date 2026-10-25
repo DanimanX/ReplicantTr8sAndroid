@@ -97,10 +97,16 @@ private:
     float phase1 = 0.0f;
     float phase2 = 0.0f;
     float phase3 = 0.0f;
+    float phase4 = 0.0f;
     std::array<float, 6> metalPhases { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
+    // Three-stage state-variable network plus the sample-and-hold DAC model
+    // used by the 909/707/626 EPROM voices and the output DC blocker.
     float svfLp1 = 0.0f, svfBp1 = 0.0f;
     float svfLp2 = 0.0f, svfBp2 = 0.0f;
+    float svfLp3 = 0.0f, svfBp3 = 0.0f;
+    float snhPhase = 0.0f, snhHeld = 0.0f;
+    float dcBlockX = 0.0f, dcBlockY = 0.0f;
     float chokeGain = 1.0f;
     bool choking = false;
 

@@ -62,4 +62,17 @@ struct FirmwareBank {
 // The .zip container is unpacked by the Android layer before it gets here.
 bool parseFirmwareBytes(const uint8_t* data, size_t size, FirmwareBank& bank, std::string& error);
 
+struct ToneMetaInfo {
+    const char* name = "";
+    uint8_t category = 1;
+    uint8_t engineType = 1;
+};
+
+// Fallback metadata for tone ids that a firmware image ships without a name.
+bool toneMetaForId(int toneId, ToneMetaInfo& out);
+
+// Synthesis category inferred from the tone id range for PCM / preset-synth
+// banks that do not carry a category byte.
+uint8_t inferToneCategory(int toneId);
+
 } // namespace rt8

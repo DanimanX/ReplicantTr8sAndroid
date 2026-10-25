@@ -101,6 +101,17 @@ int main() {
     // Reset voices and FX tails before testing the channel filter.
     engine.prepare(kSampleRate, kFrames);
 
+    // The full TR-8S note map: GM extras plus the low chromatic octave.
+    expect(rt8::noteToChannel(36) == 0, "GM note 36 maps to the bass drum");
+    // Extra GM percussion notes and the low chromatic octave are accepted too.
+    expect(rt8::noteToChannel(54) == 6, "GM tambourine maps to the hand clap channel");
+    expect(rt8::noteToChannel(55) == 8, "GM splice maps to the open hi-hat channel");
+    expect(rt8::noteToChannel(52) == 9, "GM china maps to the crash channel");
+    expect(rt8::noteToChannel(53) == 10, "GM ride bell maps to the ride channel");
+    expect(rt8::noteToChannel(24) == 0, "chromatic C1 maps to the bass drum");
+    expect(rt8::noteToChannel(34) == 10, "chromatic A1 maps to the ride");
+    expect(rt8::noteToChannel(100) == -1, "unmapped notes are ignored");
+
     // MIDI channel filter drops other channels.
     engine.setMidiChannel(0);
     engine.pushMidiMessage(0x99, 38, 120, 0);
